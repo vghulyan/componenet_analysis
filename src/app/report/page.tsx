@@ -109,7 +109,7 @@ export default function ReportPage() {
   // ─── Prepare Top-10 pie data ───────────────────────
   const top10 = rpt
     ? Object.entries(rpt.usageMap)
-        .map(([comp, files]) => ({
+        ?.map(([comp, files]) => ({
           name: comp,
           value: Object.values(files).reduce((a, b) => a + b, 0),
         }))
@@ -160,7 +160,7 @@ export default function ReportPage() {
                 </tr>
               </thead>
               <tbody>
-                {projects.map((p) => (
+                {projects?.map((p) => (
                   <tr key={p.id}>
                     <td>{p.name}</td>
                     <td className="small-text">{p.repoUrl}</td>
@@ -261,11 +261,11 @@ export default function ReportPage() {
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(rpt.usageMap).map(([comp, files]) => {
+                {Object.entries(rpt.usageMap)?.map(([comp, files]) => {
                   const pkgCounts = rpt.importMap[comp] || {};
                   const total =
                     Object.values(pkgCounts).reduce((a, b) => a + b, 0) || 1;
-                  const pieData = Object.entries(pkgCounts).map(
+                  const pieData = Object.entries(pkgCounts)?.map(
                     ([name, cnt]) => ({
                       name,
                       value: Math.round((cnt / total) * 100),
@@ -288,7 +288,7 @@ export default function ReportPage() {
                       </td>
 
                       <td style={{ paddingLeft: 12, verticalAlign: "top" }}>
-                        {Object.entries(files).map(([file, cnt]) => (
+                        {Object.entries(files)?.map(([file, cnt]) => (
                           <div
                             key={file}
                             style={{
@@ -327,7 +327,7 @@ export default function ReportPage() {
                 <ul
                   style={{ padding: "8px 16px", margin: 0, listStyle: "disc" }}
                 >
-                  {rpt.unused.map((u) => (
+                  {rpt.unused?.map((u) => (
                     <li key={u}>{u}</li>
                   ))}
                 </ul>
