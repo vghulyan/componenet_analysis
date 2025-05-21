@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import UsagePieChart from "@/components/UsagePieChart";
 
@@ -99,6 +100,14 @@ export default function ReportPage() {
   return (
     <div style={{ padding: 20, fontFamily: "sans-serif" }}>
       <nav className="navbar">
+        <Image
+          className="navbar-logo"
+          src="/logo.png"
+          alt="Component Usage Reporter Logo"
+          width={200} // you can tune this
+          height={60} // make it a bit taller if you’d like
+          priority
+        />
         <Link href="/" className="back-btn">
           <svg viewBox="0 0 24 24" fill="currentColor">
             <path
