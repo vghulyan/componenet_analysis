@@ -147,7 +147,7 @@ export default function ReportPage() {
         {/* ───────────────────────────────────────── Saved Projects ───────────────────────────────────────── */}
         <section style={{ marginBottom: "2rem" }}>
           <h2>Saved Projects</h2>
-          {projects.length === 0 ? (
+          {projects?.length === 0 ? (
             <p>No saved projects yet.</p>
           ) : (
             <table className="report-table">
@@ -227,7 +227,7 @@ export default function ReportPage() {
         </section>
 
         {/* ───────────────────────────────────────── Top-10 Global Pie ───────────────────────────────────────── */}
-        {top10.length > 0 && (
+        {top10?.length > 0 && (
           <section className="top10-section">
             <h2 style={{ fontSize: "1.75rem", fontWeight: 600 }}>
               Top 10 Components
@@ -306,7 +306,7 @@ export default function ReportPage() {
               </tbody>
             </table>
 
-            {rpt.unused.length > 0 && (
+            {rpt?.unused?.length > 0 && (
               <details
                 style={{
                   marginTop: 24,
@@ -322,7 +322,7 @@ export default function ReportPage() {
                     cursor: "pointer",
                   }}
                 >
-                  Unused Components ({rpt.unused.length})
+                  Unused Components ({rpt?.unused?.length})
                 </summary>
                 <ul
                   style={{ padding: "8px 16px", margin: 0, listStyle: "disc" }}
