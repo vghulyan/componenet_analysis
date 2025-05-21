@@ -18,34 +18,62 @@ interface RepoPayload {
   projectName?: unknown;
 }
 
+// 1) Helper: verify Prisma can actually talk to the database
+async function ensurePrisma() {
+  try {
+    // a minimal no-op query
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      "Database unreachable. Have you run `npx prisma migrate dev` and `npx prisma generate`? " +
+        msg
+    );
+  }
+}
+
 export async function GET(req: NextRequest) {
-  // If ?list=true, return just the list of projects
+  // ——————————— list saved projects ———————————
   if (req.nextUrl.searchParams.get("list") === "true") {
-    const projects = await prisma.project.findMany({
-      select: { id: true, name: true, repoUrl: true, createdAt: true },
-      orderBy: { createdAt: "desc" },
-    });
-    return NextResponse.json({ projects });
+    try {
+      await ensurePrisma();
+      const projects = await prisma.project.findMany({
+        select: { id: true, name: true, repoUrl: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+      });
+      return NextResponse.json({ projects });
+    } catch (e: unknown) {
+      return NextResponse.json(
+        { error: (e as Error).message },
+        { status: 500 }
+      );
+    }
   }
 
-  // Otherwise behave as before: report from disk
+  // ——————————— load by projectName (from TMP_ROOT) ———————————
   const projectName = req.nextUrl.searchParams.get("projectName") ?? "";
   let targetDir = SRC_DIR;
+
   if (projectName) {
+    // first ensure the clone exists
     const cloneDir = path.join(TMP_ROOT, projectName);
     if (!fs.existsSync(cloneDir)) {
-      return NextResponse.json({ error: "Clone not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: `No cloned project found: ${projectName}` },
+        { status: 404 }
+      );
     }
     targetDir = cloneDir;
   }
 
+  // ——————————— scan filesystem ———————————
   let rpt: Report;
   try {
     rpt = generateReport(targetDir);
-  } catch (e) {
-    console.error(e);
+  } catch (e: unknown) {
+    console.error("GET /api/report scan failed:", e);
     return NextResponse.json(
-      { error: "Report generation failed" },
+      { error: "Report generation failed on disk scan." },
       { status: 500 }
     );
   }
@@ -69,92 +97,124 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  let body: RepoPayload;
+  // ——————————— JSON parse & validate ———————————
+  let payload: RepoPayload;
   try {
-    body = (await req.json()) as RepoPayload;
+    payload = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
-  }
-  if (
-    typeof body.repoUrl !== "string" ||
-    typeof body.projectName !== "string"
-  ) {
     return NextResponse.json(
-      { error: "repoUrl and projectName must be strings." },
-      { status: 400 }
-    );
-  }
-  const repoUrl = body.repoUrl.trim();
-  const projectName = body.projectName.trim();
-  if (!repoUrl.toLowerCase().endsWith(".git") || !projectName) {
-    return NextResponse.json(
-      { error: "repoUrl must end .git and projectName is required." },
+      { error: "Invalid JSON payload." },
       { status: 400 }
     );
   }
 
+  if (
+    typeof payload.repoUrl !== "string" ||
+    typeof payload.projectName !== "string"
+  ) {
+    return NextResponse.json(
+      { error: "repoUrl and projectName must both be strings." },
+      { status: 400 }
+    );
+  }
+
+  const repoUrl = payload.repoUrl.trim();
+  const projectName = payload.projectName.trim();
+
+  if (!repoUrl.toLowerCase().endsWith(".git") || projectName === "") {
+    return NextResponse.json(
+      { error: "repoUrl must end in .git and projectName cannot be empty." },
+      { status: 400 }
+    );
+  }
+
+  // ——————————— ensure Prisma up ———————————
+  try {
+    await ensurePrisma();
+  } catch (e: unknown) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
+
+  // ——————————— clone into tmp_repos ———————————
   const cloneDir = path.join(TMP_ROOT, projectName);
   fs.mkdirSync(TMP_ROOT, { recursive: true });
-  if (fs.existsSync(cloneDir))
+  if (fs.existsSync(cloneDir)) {
     fs.rmSync(cloneDir, { recursive: true, force: true });
+  }
 
   try {
     execSync(`git clone ${repoUrl} ${cloneDir}`, { stdio: "ignore" });
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Git clone failed." }, { status: 500 });
-  }
-
-  let rpt: Report;
-  try {
-    rpt = generateReport(cloneDir);
-  } catch (e) {
-    console.error(e);
+  } catch (e: unknown) {
+    console.error("POST /api/report git clone failed:", e);
     return NextResponse.json(
-      { error: "Parsing clone failed." },
+      { error: "Git clone failed. Is the URL correct?" },
       { status: 500 }
     );
   }
 
-  const project = await prisma.project.upsert({
-    where: { name: projectName },
-    create: { name: projectName, repoUrl },
-    update: { repoUrl },
-  });
-
-  await prisma.$transaction([
-    prisma.componentUsage.deleteMany({ where: { projectId: project.id } }),
-    prisma.propUsage.deleteMany({ where: { projectId: project.id } }),
-    prisma.unusedComponent.deleteMany({ where: { projectId: project.id } }),
-  ]);
-
-  const compCreates = Object.entries(rpt.usageMap).flatMap(([comp, files]) => {
-    const total = Object.values(files).reduce((sum, c) => sum + c, 0);
-    return Object.entries(files).map(([file, count]) =>
-      prisma.componentUsage.create({
-        data: { component: comp, file, count, total, projectId: project.id },
-      })
+  // ——————————— parse cloned code ———————————
+  let rpt: Report;
+  try {
+    rpt = generateReport(cloneDir);
+  } catch (e: unknown) {
+    console.error("POST /api/report parse failed:", e);
+    return NextResponse.json(
+      { error: "Failed to parse cloned project." },
+      { status: 500 }
     );
-  });
-  const propCreates = Object.entries(rpt.propsMap).flatMap(([comp, files]) =>
-    Object.entries(files).flatMap(([file, setP]) =>
-      Array.from(setP).map((prop) =>
-        prisma.propUsage.create({
-          data: { component: comp, file, prop, projectId: project.id },
+  }
+
+  // ——————————— persist via Prisma ———————————
+  try {
+    const project = await prisma.project.upsert({
+      where: { name: projectName },
+      create: { name: projectName, repoUrl },
+      update: { repoUrl },
+    });
+
+    await prisma.$transaction([
+      prisma.componentUsage.deleteMany({ where: { projectId: project.id } }),
+      prisma.propUsage.deleteMany({ where: { projectId: project.id } }),
+      prisma.unusedComponent.deleteMany({ where: { projectId: project.id } }),
+
+      // insert component usages
+      ...Object.entries(rpt.usageMap).flatMap(([component, files]) => {
+        const total = Object.values(files).reduce((sum, c) => sum + c, 0);
+        return Object.entries(files).map(([file, count]) =>
+          prisma.componentUsage.create({
+            data: { component, file, count, total, projectId: project.id },
+          })
+        );
+      }),
+
+      // insert prop usages
+      ...Object.entries(rpt.propsMap).flatMap(([component, files]) =>
+        Object.entries(files).flatMap(([file, propsSet]) =>
+          Array.from(propsSet).map((prop) =>
+            prisma.propUsage.create({
+              data: { component, file, prop, projectId: project.id },
+            })
+          )
+        )
+      ),
+
+      // insert unused components
+      ...rpt.unused.map((name) =>
+        prisma.unusedComponent.create({
+          data: { name, projectId: project.id },
         })
-      )
-    )
-  );
-  const unusedCreates = rpt.unused.map((name) =>
-    prisma.unusedComponent.create({
-      data: { name, projectId: project.id },
-    })
-  );
+      ),
+    ]);
 
-  await prisma.$transaction([...compCreates, ...propCreates, ...unusedCreates]);
-
-  return NextResponse.json(
-    { success: true, projectId: project.id },
-    { status: 201 }
-  );
+    return NextResponse.json(
+      { success: true, projectId: project.id },
+      { status: 201 }
+    );
+  } catch (e: unknown) {
+    console.error("POST /api/report DB persist failed:", e);
+    return NextResponse.json(
+      { error: "Failed to persist report to database." },
+      { status: 500 }
+    );
+  }
 }
