@@ -1,4 +1,5 @@
 "use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
@@ -27,37 +28,56 @@ export default function ReportPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // 1) load projects list
+  // ─── Fetch saved projects ─────────────────────────
   async function fetchProjects() {
-    const res = await fetch("/api/report?list=true");
-    const json = (await res.json()) as { projects: Project[] };
-    setProjects(json.projects);
+    try {
+      const res = await fetch("/api/report?list=true");
+      const { projects: list } = (await res.json()) as { projects: Project[] };
+      setProjects(list);
+    } catch (e) {
+      console.error(e);
+      setMessage("❌ Failed to load saved projects");
+    }
   }
 
-  // 2) load a report (local or persisted)
+  // ─── Fetch a single report ─────────────────────────
   async function fetchReport(name?: string) {
     setLoading(true);
     setMessage(null);
     try {
       const q = name ? `?projectName=${encodeURIComponent(name)}` : "";
       const res = await fetch(`/api/report${q}`);
-      const json = (await res.json()) as RawReport;
-      setRpt(json);
-    } catch (e) {
-      console.error(e);
-      setMessage("❌ Failed to fetch report");
+      const body = (await res.json()) as Partial<RawReport> & {
+        error?: string;
+      };
+
+      if (!res.ok) {
+        // show exactly what the API sent in its `{ error: "…" }`
+        setMessage(`❌ ${body.error || "Unknown server error"}`);
+        setRpt(null);
+      } else {
+        setRpt(body as RawReport);
+        setSelected(name ?? "");
+      }
+    } catch (err) {
+      console.error(err);
+      setMessage(
+        `❌ Network error: ${err instanceof Error ? err.message : err}`
+      );
+      setRpt(null);
     } finally {
       setLoading(false);
     }
   }
 
-  // 3) generate & persist
+  // ─── Clone & persist ───────────────────────────────
   async function handleGenerate() {
     setMessage(null);
-    if (!repoUrl.endsWith(".git") || !projectName) {
-      setMessage("❌ Provide a valid .git URL and name");
+    if (!repoUrl.toLowerCase().endsWith(".git") || !projectName) {
+      setMessage("❌ Enter a valid .git URL and project name");
       return;
     }
+
     setLoading(true);
     try {
       const res = await fetch("/api/report", {
@@ -69,9 +89,8 @@ export default function ReportPage() {
       if (!res.ok) {
         setMessage(`❌ ${body.error}`);
       } else {
-        setMessage(`✅ Saved "${projectName}"`);
+        setMessage(`✅ "${projectName}" saved`);
         await fetchProjects();
-        setSelected(projectName);
         await fetchReport(projectName);
       }
     } catch (e) {
@@ -82,11 +101,12 @@ export default function ReportPage() {
     }
   }
 
+  // ─── On mount: load list + default report ──────────
   useEffect(() => {
     fetchProjects().then(() => fetchReport());
   }, []);
 
-  // top‐10 global
+  // ─── Prepare Top-10 pie data ───────────────────────
   const top10 = rpt
     ? Object.entries(rpt.usageMap)
         .map(([comp, files]) => ({
@@ -98,23 +118,22 @@ export default function ReportPage() {
     : [];
 
   return (
-    <div style={{ padding: 20, fontFamily: "sans-serif" }}>
+    <div>
+      {/* ───────────────────────────────────────── NavBar ───────────────────────────────────────── */}
       <nav className="navbar">
         <Image
           className="navbar-logo"
           src="/logo.png"
-          alt="Component Usage Reporter Logo"
-          width={200} // you can tune this
-          height={60} // make it a bit taller if you’d like
+          alt="Reporter Logo"
+          width={200}
+          height={48}
           priority
         />
         <Link href="/" className="back-btn">
-          <svg viewBox="0 0 24 24" fill="currentColor">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <path
               d="M15 18l-6-6 6-6"
               strokeWidth="2"
-              stroke="currentColor"
-              fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -124,196 +143,199 @@ export default function ReportPage() {
         <div className="navbar-title">Component Usage Reporter</div>
       </nav>
 
-      {/* ───── Projects List ───── */}
-      <section style={{ margin: "24px 0" }}>
-        <section>
+      <main style={{ padding: "2rem" }}>
+        {/* ───────────────────────────────────────── Saved Projects ───────────────────────────────────────── */}
+        <section style={{ marginBottom: "2rem" }}>
           <h2>Saved Projects</h2>
-          <table
-            className="report-table"
-            style={{ width: "100%", borderCollapse: "collapse" }}
-          >
-            <thead style={{ background: "#eee" }}>
-              <tr>
-                <th>Name</th>
-                <th>↪ Repo URL</th>
-                <th>Created</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map((p) => (
-                <tr key={p.id}>
-                  <td>{p.name}</td>
-                  <td>{p.repoUrl}</td>
-                  <td>{new Date(p.createdAt).toLocaleString()}</td>
-                  <td>
-                    <button
-                      className="btn-load"
-                      onClick={() => {
-                        setSelected(p.name);
-                        fetchReport(p.name);
-                      }}
-                      disabled={loading}
-                    >
-                      Load
-                    </button>
-                  </td>
+          {projects.length === 0 ? (
+            <p>No saved projects yet.</p>
+          ) : (
+            <table className="report-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Repo URL</th>
+                  <th>Created</th>
+                  <th>Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      </section>
-
-      {/* ───── Clone & Persist Form ───── */}
-      <section className="report-form">
-        <h2>Clone & Persist from GitHub</h2>
-
-        <div className="form-field">
-          <label>GitHub URL:</label>
-          <input
-            className="form-input"
-            type="text"
-            value={repoUrl}
-            placeholder="https://github.com/you/your-repo.git"
-            onChange={(e) => {
-              const url = e.target.value;
-              setRepoUrl(url);
-              try {
-                const parts = new URL(url).pathname.split("/");
-                const last = parts.pop() || parts.pop() || "";
-                setProjectName(last.replace(/\.git$/, ""));
-              } catch {
-                setProjectName("");
-              }
-            }}
-          />
-        </div>
-
-        <div className="form-field">
-          <label>Project Name:</label>
-          <input
-            className="form-input"
-            type="text"
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-          />
-        </div>
-
-        <button
-          className="btn-primary"
-          onClick={handleGenerate}
-          disabled={loading}
-        >
-          {loading ? "Cloning…" : "Generate & Persist"}
-        </button>
-
-        {message && <p className="form-message">{message}</p>}
-      </section>
-
-      {/* ───── Top-10 Pie ───── */}
-      <section className="top10-section">
-        <h2 style={{ fontSize: "1.75rem", fontWeight: 600 }}>
-          Top 10 Components
-        </h2>
-        <div className="top10-chart">
-          <UsagePieChart data={top10} />
-        </div>
-      </section>
-
-      {/* ───── Per-Component Breakdown ───── */}
-      {rpt && (
-        <section style={{ margin: "24px 0" }}>
-          <h2>Per-Component Breakdown {selected && `("${selected}")`}</h2>
-          <table
-            className="report-table"
-            style={{ width: "100%", borderCollapse: "collapse" }}
-          >
-            <thead>
-              <tr>
-                <th>Component</th>
-                <th
-                  title="Average number of props passed to each instance of this component"
-                  style={{ cursor: "help" }}
-                >
-                  Avg. Props ℹ️
-                </th>
-                <th>Import-Sources (%)</th>
-                <th>Usage by File</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.keys(rpt.usageMap).map((comp) => {
-                const pkgCounts = rpt.importMap[comp] || {};
-                const tot =
-                  Object.values(pkgCounts).reduce((a, b) => a + b, 0) || 1;
-                const pieData = Object.entries(pkgCounts).map(
-                  ([name, cnt]) => ({
-                    name,
-                    value: Math.round((cnt / tot) * 100),
-                  })
-                );
-                return (
-                  <tr key={comp}>
-                    <td>{comp}</td>
-                    <td style={{ textAlign: "center" }}>
-                      {rpt.avgProps[comp] ?? 0}
-                    </td>
-
-                    <td style={{ width: "50%", height: 300 }}>
-                      <UsagePieChart data={pieData} />
-                    </td>
-                    <td
-                      style={{
-                        borderLeft: "1px solid #ddd",
-                        paddingLeft: 12,
-                        verticalAlign: "top",
-                      }}
-                    >
-                      {Object.entries(rpt.usageMap[comp]).map(([file, cnt]) => (
-                        <div
-                          key={file}
-                          style={{
-                            padding: "4px 0",
-                            borderBottom: "1px solid #f0f0f0",
-                          }}
-                        >
-                          <strong>{file}</strong>: {cnt}
-                        </div>
-                      ))}
+              </thead>
+              <tbody>
+                {projects.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.name}</td>
+                    <td className="small-text">{p.repoUrl}</td>
+                    <td>{new Date(p.createdAt).toLocaleString()}</td>
+                    <td>
+                      <button
+                        className="btn-load"
+                        onClick={() => fetchReport(p.name)}
+                        disabled={loading && selected === p.name}
+                      >
+                        {loading && selected === p.name ? "Loading…" : "Load"}
+                      </button>
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {rpt.unused.length > 0 && (
-            <details
-              style={{
-                marginTop: 24,
-                border: "1px solid #ccc",
-                borderRadius: 4,
-              }}
-            >
-              <summary
-                style={{
-                  fontSize: 16,
-                  fontWeight: "bold",
-                  padding: "8px",
-                  cursor: "pointer",
-                }}
-              >
-                Unused Components ({rpt.unused.length})
-              </summary>
-              <ul style={{ padding: "8px 16px", margin: 0, listStyle: "disc" }}>
-                {rpt.unused.map((u) => (
-                  <li key={u}>{u}</li>
                 ))}
-              </ul>
-            </details>
+              </tbody>
+            </table>
           )}
         </section>
-      )}
+
+        {/* ───────────────────────────────────────── Clone & Persist Form ───────────────────────────────────────── */}
+        <section className="report-form">
+          <h2>Clone & Persist from GitHub</h2>
+
+          <div className="form-field">
+            <label>GitHub URL:</label>
+            <input
+              className="form-input"
+              type="text"
+              placeholder="https://github.com/you/your-repo.git"
+              value={repoUrl}
+              onChange={(e) => {
+                const url = e.target.value;
+                setRepoUrl(url);
+                try {
+                  const parts = new URL(url).pathname.split("/");
+                  const last = parts.pop() || parts.pop() || "";
+                  setProjectName(last.replace(/\.git$/, ""));
+                } catch {
+                  setProjectName("");
+                }
+              }}
+            />
+          </div>
+
+          <div className="form-field">
+            <label>Project Name:</label>
+            <input
+              className="form-input"
+              type="text"
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+            />
+          </div>
+
+          <button
+            className="btn-primary"
+            onClick={handleGenerate}
+            disabled={loading}
+          >
+            {loading ? "Cloning…" : "Generate & Persist"}
+          </button>
+          {message && <p className="form-message">{message}</p>}
+        </section>
+
+        {/* ───────────────────────────────────────── Top-10 Global Pie ───────────────────────────────────────── */}
+        {top10.length > 0 && (
+          <section className="top10-section">
+            <h2 style={{ fontSize: "1.75rem", fontWeight: 600 }}>
+              Top 10 Components
+            </h2>
+            <div className="top10-chart">
+              <UsagePieChart data={top10} />
+            </div>
+          </section>
+        )}
+
+        {/* ───────────────────────────────────────── Per-Component Breakdown ───────────────────────────────────────── */}
+        {rpt && (
+          <section style={{ marginTop: "2rem" }}>
+            <h2>
+              Per-Component Breakdown{" "}
+              {selected && <span style={{ fontWeight: 400 }}>{selected}</span>}
+            </h2>
+
+            <table className="report-table">
+              <thead>
+                <tr>
+                  <th>Component</th>
+                  <th
+                    title="Average # of props per instance"
+                    style={{ cursor: "help" }}
+                  >
+                    Avg. Props ℹ️
+                  </th>
+                  <th>Import-Sources (%)</th>
+                  <th>Usage by File</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(rpt.usageMap).map(([comp, files]) => {
+                  const pkgCounts = rpt.importMap[comp] || {};
+                  const total =
+                    Object.values(pkgCounts).reduce((a, b) => a + b, 0) || 1;
+                  const pieData = Object.entries(pkgCounts).map(
+                    ([name, cnt]) => ({
+                      name,
+                      value: Math.round((cnt / total) * 100),
+                    })
+                  );
+
+                  return (
+                    <tr key={comp}>
+                      <td>{comp}</td>
+                      <td style={{ textAlign: "center" }}>
+                        {(rpt.avgProps[comp] ?? 0).toFixed(1)}
+                      </td>
+
+                      <td style={{ width: 180, textAlign: "center" }}>
+                        <UsagePieChart
+                          data={pieData}
+                          width={160}
+                          height={160}
+                        />
+                      </td>
+
+                      <td style={{ paddingLeft: 12, verticalAlign: "top" }}>
+                        {Object.entries(files).map(([file, cnt]) => (
+                          <div
+                            key={file}
+                            style={{
+                              padding: "4px 0",
+                              borderBottom: "1px solid #f0f0f0",
+                            }}
+                          >
+                            <strong>{file}</strong>: {cnt}
+                          </div>
+                        ))}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {rpt.unused.length > 0 && (
+              <details
+                style={{
+                  marginTop: 24,
+                  border: "1px solid #ccc",
+                  borderRadius: 4,
+                }}
+              >
+                <summary
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 600,
+                    padding: 8,
+                    cursor: "pointer",
+                  }}
+                >
+                  Unused Components ({rpt.unused.length})
+                </summary>
+                <ul
+                  style={{ padding: "8px 16px", margin: 0, listStyle: "disc" }}
+                >
+                  {rpt.unused.map((u) => (
+                    <li key={u}>{u}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </section>
+        )}
+      </main>
     </div>
   );
 }

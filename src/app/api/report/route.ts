@@ -4,6 +4,7 @@ import { execSync } from "child_process";
 import { NextResponse, NextRequest } from "next/server";
 import { generateReport, Report } from "@/lib/parser";
 import { getPrisma } from "@/lib/prisma";
+import { PrismaClientInitializationError } from "@prisma/client/runtime/library";
 
 const SRC_DIR = path.join(process.cwd(), "src");
 const TMP_ROOT = path.join(process.cwd(), "tmp_repos");
@@ -36,6 +37,15 @@ export async function GET(req: NextRequest) {
       });
       return NextResponse.json({ projects });
     } catch (e: unknown) {
+      if (e instanceof PrismaClientInitializationError) {
+        return NextResponse.json(
+          {
+            error:
+              "📦 Prisma client is not initialized. Please run `npx prisma generate` and `npx prisma migrate dev`.",
+          },
+          { status: 500 }
+        );
+      }
       const msg = e instanceof Error ? e.message : String(e);
       return NextResponse.json({ error: msg }, { status: 500 });
     }
@@ -116,6 +126,15 @@ export async function POST(req: NextRequest) {
   try {
     await ensurePrisma();
   } catch (e: unknown) {
+    if (e instanceof PrismaClientInitializationError) {
+      return NextResponse.json(
+        {
+          error:
+            "📦 Prisma client is not initialized. Please run `npx prisma generate` and `npx prisma migrate dev`.",
+        },
+        { status: 500 }
+      );
+    }
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
