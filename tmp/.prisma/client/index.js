@@ -162,6 +162,10 @@ const config = {
         "fromEnvVar": null,
         "value": "darwin-arm64",
         "native": true
+      },
+      {
+        "fromEnvVar": null,
+        "value": "windows"
       }
     ],
     "previewFeatures": [],
@@ -187,8 +191,8 @@ const config = {
       }
     }
   },
-  "inlineSchema": "datasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\ngenerator client {\n  provider = \"prisma-client-js\"\n}\n\nmodel Project {\n  id               Int               @id @default(autoincrement())\n  name             String            @unique\n  repoUrl          String\n  createdAt        DateTime          @default(now())\n  componentUsages  ComponentUsage[]\n  propUsages       PropUsage[]\n  unusedComponents UnusedComponent[]\n}\n\nmodel ComponentUsage {\n  id        Int     @id @default(autoincrement())\n  component String\n  file      String\n  count     Int\n  total     Int\n  project   Project @relation(fields: [projectId], references: [id])\n  projectId Int\n}\n\nmodel PropUsage {\n  id        Int     @id @default(autoincrement())\n  component String\n  file      String\n  prop      String\n  project   Project @relation(fields: [projectId], references: [id])\n  projectId Int\n}\n\nmodel UnusedComponent {\n  id        Int     @id @default(autoincrement())\n  name      String\n  project   Project @relation(fields: [projectId], references: [id])\n  projectId Int\n}\n",
-  "inlineSchemaHash": "9e8172f497fc4a8f24cebbdbfafbe2fbcedbca189f42014873ae1d842eae29a6",
+  "inlineSchema": "datasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\ngenerator client {\n  provider      = \"prisma-client-js\"\n  binaryTargets = [\"native\", \"windows\"]\n}\n\nmodel Project {\n  id               Int               @id @default(autoincrement())\n  name             String            @unique\n  repoUrl          String\n  createdAt        DateTime          @default(now())\n  componentUsages  ComponentUsage[]\n  propUsages       PropUsage[]\n  unusedComponents UnusedComponent[]\n}\n\nmodel ComponentUsage {\n  id        Int     @id @default(autoincrement())\n  component String\n  file      String\n  count     Int\n  total     Int\n  project   Project @relation(fields: [projectId], references: [id])\n  projectId Int\n}\n\nmodel PropUsage {\n  id        Int     @id @default(autoincrement())\n  component String\n  file      String\n  prop      String\n  project   Project @relation(fields: [projectId], references: [id])\n  projectId Int\n}\n\nmodel UnusedComponent {\n  id        Int     @id @default(autoincrement())\n  name      String\n  project   Project @relation(fields: [projectId], references: [id])\n  projectId Int\n}\n",
+  "inlineSchemaHash": "494aeb24b660e7f275a1cf473f397c8fc6807c4e028888127493681e63b05329",
   "copyEngine": true
 }
 
@@ -229,6 +233,10 @@ Object.assign(exports, Prisma)
 // file annotations for bundling tools to include these files
 path.join(__dirname, "libquery_engine-darwin-arm64.dylib.node");
 path.join(process.cwd(), "node_modules/.prisma/client/libquery_engine-darwin-arm64.dylib.node")
+
+// file annotations for bundling tools to include these files
+path.join(__dirname, "query_engine-windows.dll.node");
+path.join(process.cwd(), "node_modules/.prisma/client/query_engine-windows.dll.node")
 // file annotations for bundling tools to include these files
 path.join(__dirname, "schema.prisma");
 path.join(process.cwd(), "node_modules/.prisma/client/schema.prisma")
