@@ -146,7 +146,8 @@ export async function POST(req: NextRequest) {
 
   try {
     execSync(`git clone ${repoUrl} ${cloneDir}`, { stdio: "ignore" });
-  } catch {
+  } catch (e) {
+    console.error("Git clone failed:", e);
     return NextResponse.json(
       { error: "Git clone failed. Check the URL?" },
       { status: 500 }

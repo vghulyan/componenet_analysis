@@ -6,7 +6,6 @@ import { PrismaClient } from "@prisma/client";
 import path from "path";
 
 const DB_PROVIDER = process.env.DB_PROVIDER || "prisma";
-console.log("\n\n\n*********DB_PROVIDER", DB_PROVIDER);
 
 let prisma: PrismaClient | null = null;
 let sqljsDb: Database | null = null;
