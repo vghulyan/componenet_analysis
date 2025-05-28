@@ -1,0 +1,44 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Project {
+  id               Int               @id @default(autoincrement())
+  name             String            @unique
+  repoUrl          String
+  createdAt        DateTime          @default(now())
+  componentUsages  ComponentUsage[]
+  propUsages       PropUsage[]
+  unusedComponents UnusedComponent[]
+}
+
+model ComponentUsage {
+  id        Int     @id @default(autoincrement())
+  component String
+  file      String
+  count     Int
+  total     Int
+  project   Project @relation(fields: [projectId], references: [id])
+  projectId Int
+}
+
+model PropUsage {
+  id        Int     @id @default(autoincrement())
+  component String
+  file      String
+  prop      String
+  project   Project @relation(fields: [projectId], references: [id])
+  projectId Int
+}
+
+model UnusedComponent {
+  id        Int     @id @default(autoincrement())
+  name      String
+  project   Project @relation(fields: [projectId], references: [id])
+  projectId Int
+}
