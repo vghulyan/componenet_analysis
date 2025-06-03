@@ -1,11 +1,13 @@
+// components/SavedProjectsTable.tsx
 "use client";
+
 import { Project } from "@/app/types";
 
-type Props = {
+type SavedProjectsTableProps = {
   projects: Project[];
   selected: string;
   loading: boolean;
-  onLoad: (name: string) => void;
+  onLoad: (projectName: string) => void;
 };
 
 export default function SavedProjectsTable({
@@ -13,13 +15,12 @@ export default function SavedProjectsTable({
   selected,
   loading,
   onLoad,
-}: Props) {
+}: SavedProjectsTableProps) {
   if (projects.length === 0) return null;
 
   return (
     <section style={{ marginTop: "2rem" }}>
       <h2>Saved Projects</h2>
-
       <table className="report-table">
         <thead>
           <tr>

@@ -164,3 +164,10 @@ body {
   height: 400px;
   margin-top: 1rem;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────────────
+   Hover effect for rows in any table with class="report-table"
+───────────────────────────────────────────────────────────────────────────────────── */
+.report-table tbody tr:hover {
+  background-color: #f0f8ff; /* a very light blue; adjust as desired */
+}

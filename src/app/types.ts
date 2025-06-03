@@ -1,4 +1,4 @@
-/* Shared types so every component can import from one place */
+// app/types.ts
 
 export type RawReport = {
   usageMap: Record<string, Record<string, number>>;

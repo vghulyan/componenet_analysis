@@ -1,6 +1,7 @@
+// components/ChartsPanel.tsx
 "use client";
 
-import { RawReport } from "@/app/types";
+import { useMemo } from "react";
 import UsagePieChart from "@/components/UsagePieChart";
 import {
   BarChart,
@@ -11,66 +12,74 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { useMemo } from "react";
 
-type Props = {
+import { RawReport } from "@/app/types";
+
+type ChartsPanelProps = {
   rpt: RawReport;
   showAll: boolean;
   toggleShowAll: () => void;
 };
 
-export default function ChartsPanel({ rpt, showAll, toggleShowAll }: Props) {
-  /* ── Prepare pieData ───────────────────────────────────────── */
-  const pieData = useMemo(() => {
-    // Build [component, totalUsage] array
-    const totals: [string, number][] = Object.entries(rpt.usageMap).map(
-      ([comp, files]) => [comp, Object.values(files).reduce((a, b) => a + b, 0)]
-    );
+export default function ChartsPanel({
+  rpt,
+  showAll,
+  toggleShowAll,
+}: ChartsPanelProps) {
+  //
+  // ─── Top-10 PIE DATA ──────────────────────────────────────────────────────────────
+  //
+  const top10 = useMemo(() => {
+    return Object.entries(rpt.usageMap)
+      .map(([component, files]) => ({
+        name: component,
+        value: Object.values(files).reduce((sum, c) => sum + c, 0),
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+  }, [rpt.usageMap]);
 
-    // Sort descending, then take top 10 (unless showAll is true)
-    const sliceCount = showAll ? totals.length : 10;
-    const topList = totals.sort((a, b) => b[1] - a[1]).slice(0, sliceCount);
-
-    return topList.map(([name, value]) => ({ name, value }));
-  }, [rpt, showAll]);
-
-  /* ── Prepare barData ───────────────────────────────────────── */
+  //
+  // ─── BAR CHART DATA: DISTINCT COMPONENT COUNT PER PACKAGE ─────────────────────────
+  //
   const barData = useMemo(() => {
-    // Only count components in pieData set
-    const wanted = new Set(pieData.map((p) => p.name));
     const counts: Record<string, number> = {};
-
-    Object.entries(rpt.importMap).forEach(([comp, pkgs]) => {
-      if (!wanted.has(comp)) return;
-      Object.keys(pkgs).forEach((pkgName) => {
+    Object.values(rpt.importMap).forEach((importRecord) => {
+      Object.keys(importRecord).forEach((pkgName) => {
         counts[pkgName] = (counts[pkgName] || 0) + 1;
       });
     });
-
     return Object.entries(counts).map(([name, cnt]) => ({ name, cnt }));
-  }, [rpt, pieData]);
+  }, [rpt.importMap]);
+
+  //
+  // ─── ALL COMPONENT NAMES (to render when showAll === true) ─────────────────────────
+  //
+  const allComponentNames = useMemo(() => {
+    return Object.keys(rpt.usageMap).sort((a, b) => a.localeCompare(b));
+  }, [rpt.usageMap]);
 
   return (
-    <>
-      {/* Toggle Top-10 / All */}
-      <div style={{ textAlign: "center", marginTop: "1rem" }}>
-        <label style={{ fontWeight: 600 }}>
-          <input
-            type="checkbox"
-            checked={showAll}
-            onChange={toggleShowAll}
-            style={{ marginRight: 6 }}
-          />
-          Show all components
-        </label>
+    <section style={{ margin: "2rem 0" }}>
+      {/* ─── Toggle Button ────────────────────────────────────────────────────────── */}
+      <div style={{ textAlign: "center", marginBottom: "1rem" }}>
+        <button
+          onClick={toggleShowAll}
+          style={{
+            padding: "0.5rem 1rem",
+            backgroundColor: "#0070f3",
+            color: "#fff",
+            border: "none",
+            borderRadius: 4,
+            cursor: "pointer",
+          }}
+        >
+          {showAll ? "Show only Top-10" : "Show all components"}
+        </button>
       </div>
 
-      {/* Pie & Bar charts */}
-      <section style={{ margin: "2rem 0" }}>
-        <h2 style={{ textAlign: "center", marginBottom: 12 }}>
-          {showAll ? "All Components" : "Top 10 Components"}
-        </h2>
-
+      {/* ─── If showAll === false: render Top-10 pie & bar charts ───────────────────── */}
+      {!showAll && (
         <div
           style={{
             display: "flex",
@@ -79,23 +88,28 @@ export default function ChartsPanel({ rpt, showAll, toggleShowAll }: Props) {
             flexWrap: "wrap",
           }}
         >
-          {/* Pie Chart */}
-          <UsagePieChart data={pieData} width={350} height={350} />
-
-          {/* Bar Chart */}
-          <div style={{ width: 380, height: 380, textAlign: "center" }}>
-            <h3 style={{ margin: 0, marginBottom: 8, fontSize: "1rem" }}>
-              Components per&nbsp;Package
+          {/* ── Top-10 Pie ── */}
+          <div>
+            <h3 style={{ textAlign: "center", marginBottom: "0.5rem" }}>
+              Top-10 Components
             </h3>
-            <ResponsiveContainer>
+            <UsagePieChart data={top10} width={300} height={300} />
+          </div>
+
+          {/* ── Bar Chart ── */}
+          <div style={{ width: 380, height: 300, textAlign: "center" }}>
+            <h3 style={{ margin: 0, marginBottom: 8, fontSize: "1rem" }}>
+              Components per Package
+            </h3>
+            <ResponsiveContainer width="100%" height="100%">
               <BarChart data={barData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey="name"
-                  tick={{ fontSize: 11 }}
+                  tick={{ fontSize: 10 }}
                   angle={-40}
                   textAnchor="end"
-                  height={70}
+                  height={60}
                 />
                 <YAxis allowDecimals={false} />
                 <Tooltip />
@@ -104,7 +118,40 @@ export default function ChartsPanel({ rpt, showAll, toggleShowAll }: Props) {
             </ResponsiveContainer>
           </div>
         </div>
-      </section>
-    </>
+      )}
+
+      {/* ─── If showAll === true: render a scrollable list of all component names ───── */}
+      {showAll && (
+        <div
+          style={{
+            maxHeight: "300px",
+            overflowY: "auto",
+            border: "1px solid #ddd",
+            borderRadius: 4,
+            padding: "1rem",
+            background: "#fafafa",
+          }}
+        >
+          <h3 style={{ margin: "0 0 0.5rem" }}>
+            All Components ({allComponentNames.length})
+          </h3>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {allComponentNames.map((name) => (
+              <li
+                key={name}
+                style={{
+                  padding: "0.25rem 0",
+                  borderBottom: "1px solid #eee",
+                  fontSize: "0.95rem",
+                  color: "#333",
+                }}
+              >
+                {name}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
