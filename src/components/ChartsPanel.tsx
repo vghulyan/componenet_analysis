@@ -33,7 +33,7 @@ export default function ChartsPanel({
     return Object.entries(rpt.usageMap)
       .map(([component, files]) => ({
         name: component,
-        value: Object.values(files).reduce((sum, c) => sum + c, 0),
+        value: Object.values(files).reduce((sum, count) => sum + count, 0),
       }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 10);
@@ -72,6 +72,8 @@ export default function ChartsPanel({
             border: "none",
             borderRadius: 4,
             cursor: "pointer",
+            fontSize: "1rem",
+            fontWeight: 600,
           }}
         >
           {showAll ? "Show only Top-10" : "Show all components"}
@@ -90,30 +92,54 @@ export default function ChartsPanel({
         >
           {/* ── Top-10 Pie ── */}
           <div>
-            <h3 style={{ textAlign: "center", marginBottom: "0.5rem" }}>
+            <h3
+              style={{
+                textAlign: "center",
+                marginBottom: "0.5rem",
+                fontSize: "1.25rem",
+                fontWeight: 600,
+              }}
+            >
               Top-10 Components
             </h3>
-            <UsagePieChart data={top10} width={300} height={300} />
+            <UsagePieChart data={top10} width={400} height={400} />
           </div>
 
           {/* ── Bar Chart ── */}
-          <div style={{ width: 380, height: 300, textAlign: "center" }}>
-            <h3 style={{ margin: 0, marginBottom: 8, fontSize: "1rem" }}>
+          <div style={{ width: 500, height: 420, textAlign: "center" }}>
+            <h3
+              style={{
+                margin: 0,
+                marginBottom: 12,
+                fontSize: "1.25rem",
+                fontWeight: 600,
+              }}
+            >
               Components per Package
             </h3>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barData}>
+            <ResponsiveContainer width="100%" height={350}>
+              <BarChart
+                data={barData}
+                margin={{ top: 10, right: 20, left: 20, bottom: 60 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey="name"
-                  tick={{ fontSize: 10 }}
-                  angle={-40}
+                  tick={{ fontSize: 14, fill: "#333" }}
+                  angle={-45}
                   textAnchor="end"
-                  height={60}
+                  height={80}
                 />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="cnt" fill="#8884d8" />
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fontSize: 14, fill: "#333" }}
+                  width={40}
+                />
+                <Tooltip
+                  contentStyle={{ fontSize: 14 }}
+                  labelStyle={{ fontWeight: 600 }}
+                />
+                <Bar dataKey="cnt" fill="#8884d8" barSize={40} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -132,7 +158,13 @@ export default function ChartsPanel({
             background: "#fafafa",
           }}
         >
-          <h3 style={{ margin: "0 0 0.5rem" }}>
+          <h3
+            style={{
+              margin: "0 0 0.5rem",
+              fontSize: "1.1rem",
+              fontWeight: 600,
+            }}
+          >
             All Components ({allComponentNames.length})
           </h3>
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -140,9 +172,9 @@ export default function ChartsPanel({
               <li
                 key={name}
                 style={{
-                  padding: "0.25rem 0",
+                  padding: "0.5rem 0",
                   borderBottom: "1px solid #eee",
-                  fontSize: "0.95rem",
+                  fontSize: "1rem",
                   color: "#333",
                 }}
               >
