@@ -3,45 +3,39 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import UsagePieChart from "@/components/UsagePieChart";
 
-type RawReport = {
-  usageMap: Record<string, Record<string, number>>;
-  importMap: Record<string, Record<string, number>>;
-  avgProps: Record<string, number>;
-  propsMap: Record<string, Record<string, string[]>>;
-  unused: string[];
-};
-type Project = {
-  id: number;
-  name: string;
-  repoUrl: string;
-  createdAt: string;
-};
+import { RawReport, Project } from "@/app/types";
+import CloneForm from "@/components/CloneForm";
+import SavedProjectsTable from "@/components/SavedProjectsTable";
+import ChartsPanel from "@/components/ChartsPanel";
+import DetailTable from "@/components/DetailTable";
 
 export default function ReportPage() {
+  /* ── State ─────────────────────────── */
   const [projects, setProjects] = useState<Project[]>([]);
   const [selected, setSelected] = useState<string>("");
   const [rpt, setRpt] = useState<RawReport | null>(null);
+
   const [repoUrl, setRepoUrl] = useState("");
   const [projectName, setProjectName] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<"name" | "avgProps">("name");
-  const [sortAsc, setSortAsc] = useState<boolean>(true);
 
+  /* NEW ─ toggle between Top-10 and All */
+  const [showAll, setShowAll] = useState(false);
+
+  /* ── Fetchers ──────────────────────── */
   async function fetchProjects() {
     try {
       const res = await fetch("/api/report?list=true");
-      const { projects: list } = (await res.json()) as { projects: Project[] };
-      setProjects(list);
-    } catch (e) {
-      console.error(e);
+      const { projects } = (await res.json()) as { projects: Project[] };
+      setProjects(projects);
+    } catch {
       setMessage("❌ Failed to load saved projects");
     }
   }
 
-  async function fetchReport(name?: string) {
+  async function fetchReport(name = "") {
     setLoading(true);
     setMessage(null);
     try {
@@ -52,31 +46,25 @@ export default function ReportPage() {
       };
 
       if (!res.ok) {
-        setMessage(`❌ ${body.error || "Unknown server error"}`);
-        setRpt(null);
+        setMessage(`❌ ${body.error || "Unknown error"}`);
       } else {
         setRpt(body as RawReport);
-        setSelected(name ?? "");
+        setSelected(name);
       }
-    } catch (err) {
-      console.error(err);
-      setMessage(
-        `❌ Network error: ${err instanceof Error ? err.message : err}`
-      );
-      setRpt(null);
+    } catch {
+      setMessage("❌ Network error");
     } finally {
       setLoading(false);
     }
   }
 
   async function handleGenerate() {
-    setMessage(null);
-    if (!repoUrl.toLowerCase().endsWith(".git") || !projectName) {
+    if (!repoUrl.endsWith(".git") || !projectName) {
       setMessage("❌ Enter a valid .git URL and project name");
       return;
     }
-
     setLoading(true);
+    setMessage(null);
     try {
       const res = await fetch("/api/report", {
         method: "POST",
@@ -87,53 +75,34 @@ export default function ReportPage() {
       if (!res.ok) {
         setMessage(`❌ ${body.error}`);
       } else {
-        setMessage(`✅ "${projectName}" saved`);
+        setMessage(`✅ “${projectName}” saved`);
         await fetchProjects();
         await fetchReport(projectName);
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
       setMessage("❌ Network error");
     } finally {
       setLoading(false);
     }
   }
 
+  /* ── Lifecycle: load list + default report ───────────────── */
   useEffect(() => {
     fetchProjects().then(() => fetchReport());
   }, []);
 
-  // ─── Prepare Top-10 pie data ───────────────────────
-  const top10 = rpt
-    ? Object.entries(rpt.usageMap)
-        ?.map(([comp, files]) => ({
-          name: comp,
-          value: Object.values(files).reduce((a, b) => a + b, 0),
-        }))
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 10)
-    : [];
-
-  const sortedComponents = rpt
-    ? Object.keys(rpt.usageMap).sort((a, b) => {
-        const aVal = sortBy === "avgProps" ? rpt.avgProps[a] || 0 : a;
-        const bVal = sortBy === "avgProps" ? rpt.avgProps[b] || 0 : b;
-        return sortAsc ? (aVal > bVal ? 1 : -1) : aVal < bVal ? 1 : -1;
-      })
-    : [];
-
+  /* ── Render ───────────────────────── */
   return (
     <div>
+      {/* ───────── NavBar ───────── */}
       <nav className="navbar">
         <Image
-          className="navbar-logo"
           src="/logo.png"
-          alt="Reporter Logo"
+          alt="Reporter"
           width={200}
           height={48}
-          priority
+          className="navbar-logo"
         />
-
         <Link href="/" className="back-btn">
           ← Back
         </Link>
@@ -141,167 +110,36 @@ export default function ReportPage() {
       </nav>
 
       <main style={{ padding: "2rem" }}>
-        <section className="report-form">
-          <h2>Clone & Persist from GitHub</h2>
-          <input
-            className="form-input"
-            type="text"
-            placeholder="https://github.com/you/your-repo.git"
-            value={repoUrl}
-            onChange={(e) => {
-              setRepoUrl(e.target.value);
-              try {
-                const parts = new URL(e.target.value).pathname.split("/");
-                const last = parts.pop() || parts.pop() || "";
-                setProjectName(last.replace(/\.git$/, ""));
-              } catch {
-                setProjectName("");
-              }
-            }}
-          />
-          <input
-            className="form-input"
-            type="text"
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-          />
-          <button
-            className="btn-primary"
-            onClick={handleGenerate}
-            disabled={loading}
-          >
-            {loading ? "Cloning…" : "Generate & Persist"}
-          </button>
-          {message && <p className="form-message">{message}</p>}
-        </section>
+        {/* ───────── CloneForm ───────── */}
+        <CloneForm
+          repoUrl={repoUrl}
+          setRepoUrl={setRepoUrl}
+          projectName={projectName}
+          setProjectName={setProjectName}
+          loading={loading}
+          onGenerate={handleGenerate}
+          message={message}
+        />
 
-        {projects.length > 0 && (
-          <section style={{ marginTop: "2rem" }}>
-            <h2>Saved Projects</h2>
-            <table className="report-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Repo URL</th>
-                  <th>Created</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projects.map((p) => (
-                  <tr key={p.id}>
-                    <td>{p.name}</td>
-                    <td className="small-text">{p.repoUrl}</td>
-                    <td>{new Date(p.createdAt).toLocaleString()}</td>
-                    <td>
-                      <button
-                        className="btn-load"
-                        onClick={() => fetchReport(p.name)}
-                        disabled={loading && selected === p.name}
-                      >
-                        {loading && selected === p.name ? "Loading…" : "Load"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        )}
+        {/* ───────── SavedProjectsTable ───────── */}
+        <SavedProjectsTable
+          projects={projects}
+          selected={selected}
+          loading={loading}
+          onLoad={(name: string) => fetchReport(name)}
+        />
 
-        {top10?.length > 0 && (
-          <section className="top10-section">
-            <h2 style={{ fontSize: "1.75rem", fontWeight: 600 }}>
-              Top 10 Components
-            </h2>
-            <div className="top10-chart">
-              <UsagePieChart data={top10} />
-            </div>
-          </section>
-        )}
-
+        {/* ───────── ChartsPanel ───────── */}
         {rpt && (
-          <section style={{ marginTop: "2rem" }}>
-            <h2>Component Usage by Import Path</h2>
-
-            <table className="report-table">
-              <thead>
-                <tr>
-                  <th
-                    onClick={() => {
-                      setSortBy("name");
-                      setSortAsc((prev) => sortBy !== "name" || !prev);
-                    }}
-                  >
-                    Component
-                  </th>
-                  <th
-                    onClick={() => {
-                      setSortBy("avgProps");
-                      setSortAsc((prev) => sortBy !== "avgProps" || !prev);
-                    }}
-                  >
-                    Avg. Props
-                  </th>
-                  <th>Import Source</th>
-                  <th>Usage Pie</th>
-                  <th>Files Used In</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedComponents.map((comp) => {
-                  const imports = rpt.importMap[comp] || {};
-                  const usage = rpt.usageMap[comp] || {};
-                  const avg = rpt.avgProps[comp] || 0;
-                  const total = Object.values(imports).reduce(
-                    (a, b) => a + b,
-                    0
-                  );
-                  const pie = Object.entries(imports).map(([name, value]) => ({
-                    name,
-                    value: Math.round((value / total) * 100),
-                  }));
-
-                  return (
-                    <tr key={comp}>
-                      <td>{comp}</td>
-                      <td style={{ textAlign: "center" }}>{avg.toFixed(1)}</td>
-                      <td>
-                        {Object.entries(imports).map(([lib, cnt]) => (
-                          <div key={lib}>
-                            {lib} ({cnt})
-                          </div>
-                        ))}
-                      </td>
-                      <td style={{ width: "240px", textAlign: "center" }}>
-                        <UsagePieChart data={pie} width={240} height={200} />
-                      </td>
-
-                      <td style={{ paddingLeft: 8 }}>
-                        {Object.entries(usage).map(([f, c]) => (
-                          <div key={f}>
-                            {f}: {c}
-                          </div>
-                        ))}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-
-            {rpt.unused?.length > 0 && (
-              <details style={{ marginTop: 24 }}>
-                <summary>Unused Components ({rpt.unused.length})</summary>
-                <ul>
-                  {rpt.unused.map((u) => (
-                    <li key={u}>{u}</li>
-                  ))}
-                </ul>
-              </details>
-            )}
-          </section>
+          <ChartsPanel
+            rpt={rpt}
+            showAll={showAll}
+            toggleShowAll={() => setShowAll((prev) => !prev)}
+          />
         )}
+
+        {/* ───────── DetailTable ───────── */}
+        {rpt && <DetailTable rpt={rpt} showAll={showAll} />}
       </main>
     </div>
   );
