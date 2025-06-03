@@ -103,6 +103,17 @@ export default function ReportPage() {
     fetchProjects().then(() => fetchReport());
   }, []);
 
+  // ─── Prepare Top-10 pie data ───────────────────────
+  const top10 = rpt
+    ? Object.entries(rpt.usageMap)
+        ?.map(([comp, files]) => ({
+          name: comp,
+          value: Object.values(files).reduce((a, b) => a + b, 0),
+        }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 10)
+    : [];
+
   const sortedComponents = rpt
     ? Object.keys(rpt.usageMap).sort((a, b) => {
         const aVal = sortBy === "avgProps" ? rpt.avgProps[a] || 0 : a;
@@ -195,6 +206,17 @@ export default function ReportPage() {
                 ))}
               </tbody>
             </table>
+          </section>
+        )}
+
+        {top10?.length > 0 && (
+          <section className="top10-section">
+            <h2 style={{ fontSize: "1.75rem", fontWeight: 600 }}>
+              Top 10 Components
+            </h2>
+            <div className="top10-chart">
+              <UsagePieChart data={top10} />
+            </div>
           </section>
         )}
 
