@@ -1,11 +1,11 @@
 # Component Usage Reporter
 
-A full-stack Next.js application for analyzing your React/TypeScript codebase. It discovers:
+A full-stack Next.js application for analyzing React/TypeScript codebase. It discovers:
 
 - How many times each UI component is used
 - Which package each component is imported from
 - The average number of props each component takes
-- Unused components in your project
+- Unused components in the project
 - Persists all results to PostgreSQL via Prisma
 
 ---
@@ -21,7 +21,8 @@ A full-stack Next.js application for analyzing your React/TypeScript codebase. I
   - Per-component pie charts showing import-source breakdown
   - Global “Top 10 Components” donut chart
 - **“Clone & Persist”** a public GitHub repo on-the-fly
-- **Prisma-backed** PostgreSQL schema with indexable project records
+- **Prisma-backed** PostgreSQL schema with indexable project records or
+- **SQL JS-backed** SQL JS DB
 
 ---
 
@@ -41,10 +42,13 @@ A full-stack Next.js application for analyzing your React/TypeScript codebase. I
 3. Configure environment
 
 ```cp .env.example .env
-# then edit .env and set DATABASE_URL to your Postgres connection string
+# then edit .env and set :
+DB_PROVIDER=sqljs      # or use: sqljs | prisma
+
+if using Postgres then set the DATABASE_URL to point to your your Postgres
 ```
 
-4. Initialize database
+4. If using Postgres. Initialize database
    `npx prisma migrate dev --name init`
 
 5. Start development server
