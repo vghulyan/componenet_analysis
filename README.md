@@ -1,14 +1,57 @@
 # Component Usage Reporter
 
-A full-stack Next.js application for analyzing React/TypeScript codebase. It discovers:
+Scans a React / TypeScript codebase and reports how each UI component is used.
 
-- How many times each UI component is used
-- Which package each component is imported from
-- The average number of props each component takes
-- Unused components in the project
-- Persists all results to PostgreSQL via Prisma
+- Counts every component instance.
+- Records the import path for each component.
+- Calculates the average number of props per component.
+- Lists components that are never imported.
+- Saves all results to PostgreSQL (Prisma) or in-browser SQL.js.
+
+Purpose & Context
+Our new Component Usage Reporter is designed to analyse how React UI components are used across your codebase.
+
+# Key Features & Workflows
+
+1. Clone & Persist
+
+   - Enter a Git URL and project name in CloneForm
+   - Repository is cloned, built, and its usage data captured.
+
+2. Saved Projects Management
+
+   - SavedProjectsTable lists all analused projects with "Load" actions.
+   - Quickly switch between reports to compare multiple codebases or branches.
+
+3. Top-10 Pie Chart
+
+   - ChartsPanel displays a pie of the ten most-imported components.
+   - Immediately highlights your "core" components candiates for prioritise migration.
+
+4. Components Per Package Bar Chart
+
+   - Visualises how many distinct components each package contributes.
+   - Reveals which libraries drive the most UI code surface.
+
+5. Drill Down Detail Table
+
+   - DetailTable lists each component, its average props count, import sources, usage breakdown across files.
+   - Sortable by name or average props to find heavy or property rich components.
+
+6. Unused Components
+
+   - A collapsible list of components never imported ideal for cleanup or retirement.
 
 ---
+
+# Benefits
+
+The component Usage Reporter provides the analytical backbone for a controlled, transparent migration from legacy UI libraries to your new component system minimising risk, maximising ROI.
+
+- Data Drive Decisions - Move from gut feel to measurable migration milestones.
+- Cost Savings - Focus effort where impact is highest, avoid spending on rarely used components.
+- Quality & Consistency - Standardise on a single UI library, reducing maintenance overhead.
+- Transparency - Charts and tables sh owing integration progress.
 
 ## 🚀 Features
 
