@@ -94,8 +94,9 @@ export default function ChartsPanel({
           style={{
             display: "flex",
             justifyContent: "center",
-            gap: "2rem",
+            gap: "12rem",
             flexWrap: "wrap",
+            height: "100%",
           }}
         >
           {/* ── Top-10 Pie ── */}
