@@ -30,11 +30,10 @@ A full-stack Next.js application for analyzing React/TypeScript codebase. It dis
 
 1. **Clone** this repo
 
-   ````bash
+   ```bash
    git clone https://github.com/your-org/component-usage-reporter.git
-   cd component-usage-reporter```
-
-   ````
+   cd component-usage-reporter
+   ```
 
 2. Install dependencies
    `npm install`
@@ -45,7 +44,7 @@ A full-stack Next.js application for analyzing React/TypeScript codebase. It dis
 # then edit .env and set :
 DB_PROVIDER=sqljs      # or use: sqljs | prisma
 
-if using Postgres then set the DATABASE_URL to point to your your Postgres
+if using Postgres then point your DATABASE_URL to your your Postgres db
 ```
 
 4. If using Postgres. Initialize database
