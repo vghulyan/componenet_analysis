@@ -1,11 +1,11 @@
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
 import { NextResponse, NextRequest } from "next/server";
 import { generateReport, Report } from "@/lib/parser";
 import { getDb, saveSqljsDb } from "@/lib/db";
 import type { PrismaClient } from "@prisma/client";
 import type { Database } from "sql.js";
+import { safeClone } from "@/lib/safeClone";
 
 const SRC_DIR = path.join(process.cwd(), "src");
 const TMP_ROOT = path.join(process.cwd(), "tmp_repos");
@@ -145,14 +145,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    execSync(`git clone ${repoUrl} ${cloneDir}`, { stdio: "ignore" });
+    safeClone(repoUrl, cloneDir); // ← NEW
   } catch (e) {
-    const error = e instanceof Error ? e : new Error(String(e));
-    console.error("Git clone failed:", error.message);
-    return NextResponse.json(
-      { error: "Git clone failed. Check the URL?" },
-      { status: 500 }
-    );
+    console.error("Git clone failed:", (e as Error).message);
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
 
   let rpt: Report;
