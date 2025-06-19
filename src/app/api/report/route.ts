@@ -266,3 +266,56 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const name = req.nextUrl.searchParams.get("projectName") || "";
+  if (!name) {
+    return NextResponse.json(
+      { error: "projectName required" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    await ensureDbConnection();
+    const { type, db } = await getDb();
+
+    if (type === "sqljs") {
+      const sqlDb = db as Database;
+      // cascade deletes
+      sqlDb.run(
+        "DELETE FROM ComponentUsage WHERE projectId IN (SELECT id FROM Project WHERE name = ?)",
+        [name]
+      );
+      sqlDb.run(
+        "DELETE FROM PropUsage      WHERE projectId IN (SELECT id FROM Project WHERE name = ?)",
+        [name]
+      );
+      sqlDb.run(
+        "DELETE FROM UnusedComponent WHERE projectId IN (SELECT id FROM Project WHERE name = ?)",
+        [name]
+      );
+      sqlDb.run("DELETE FROM Project WHERE name = ?", [name]);
+      await saveSqljsDb();
+    } else {
+      const prisma = db as PrismaClient;
+      await prisma.$transaction([
+        prisma.componentUsage.deleteMany({ where: { project: { name } } }),
+        prisma.propUsage.deleteMany({ where: { project: { name } } }),
+        prisma.unusedComponent.deleteMany({ where: { project: { name } } }),
+        prisma.project.deleteMany({ where: { name } }),
+      ]);
+    }
+
+    // wipe cloned repo if it exists
+    const dir = path.join(TMP_ROOT, name);
+    fs.rmSync(dir, { recursive: true, force: true });
+
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 }
+    );
+  }
+}

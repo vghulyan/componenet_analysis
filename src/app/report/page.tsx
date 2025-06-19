@@ -86,6 +86,31 @@ export default function ReportPage() {
     }
   }
 
+  async function handleDelete(name: string) {
+    if (!confirm(`Delete “${name}” and its data?`)) return;
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `/api/report?projectName=${encodeURIComponent(name)}`,
+        {
+          method: "DELETE",
+        }
+      );
+      if (!res.ok) {
+        const { error } = await res.json();
+        setMessage(`❌ ${error || "Delete failed"}`);
+      } else {
+        setMessage(`🗑 “${name}” removed`);
+        await fetchProjects();
+        if (selected === name) setRpt(null);
+      }
+    } catch {
+      setMessage("❌ Network error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   /* ── Lifecycle: load list + default report ───────────────── */
   useEffect(() => {
     fetchProjects().then(() => fetchReport());
@@ -120,15 +145,14 @@ export default function ReportPage() {
           onGenerate={handleGenerate}
           message={message}
         />
-
         {/* ───────── SavedProjectsTable ───────── */}
         <SavedProjectsTable
           projects={projects}
           selected={selected}
           loading={loading}
           onLoad={(name: string) => fetchReport(name)}
+          onDelete={handleDelete}
         />
-
         {/* ───────── ChartsPanel ───────── */}
         {rpt && (
           <ChartsPanel
@@ -137,7 +161,6 @@ export default function ReportPage() {
             toggleShowAll={() => setShowAll((prev) => !prev)}
           />
         )}
-
         {/* ───────── DetailTable ───────── */}
         {rpt && <DetailTable rpt={rpt} showAll={showAll} />}
       </main>

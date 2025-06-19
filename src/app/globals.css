@@ -97,6 +97,11 @@ body {
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
+.danger {
+  color: #fff;
+  background: #b91c1c;
+}
+
 .btn-primary:disabled,
 .btn-load:disabled {
   background-color: #aacfff;
