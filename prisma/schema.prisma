@@ -17,6 +17,8 @@ model Project {
   componentUsages  ComponentUsage[]
   propUsages       PropUsage[]
   unusedComponents UnusedComponent[]
+
+  classRule ClassRule[]
 }
 
 model ComponentUsage {
@@ -45,3 +47,11 @@ model UnusedComponent {
   projectId Int
 }
 
+model ClassRule {
+  id        Int      @id @default(autoincrement())
+  pattern   String
+  package   String
+  component String?
+  project   Project  @relation(fields: [projectId], references: [id])
+  projectId Int
+}

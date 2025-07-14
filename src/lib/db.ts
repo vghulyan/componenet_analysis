@@ -1,5 +1,4 @@
-// lib/db.ts
-
+/* lib/db.ts — full */
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import initSqlJs, { Database } from "sql.js";
 import { PrismaClient } from "@prisma/client";
@@ -19,13 +18,21 @@ export async function getDb() {
       const buffer = existsSync(dbPath) ? readFileSync(dbPath) : undefined;
       sqljsDb = buffer ? new SQL.Database(buffer) : new SQL.Database();
 
-      // optional: create tables if fresh
+      /* ── create tables (idempotent) ── */
       sqljsDb.run(`
         CREATE TABLE IF NOT EXISTS Project (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT UNIQUE,
           repoUrl TEXT,
           createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS ClassRule (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          pattern TEXT,
+          package TEXT,
+          component TEXT,
+          projectId INT
         );
 
         CREATE TABLE IF NOT EXISTS ComponentUsage (
@@ -47,10 +54,8 @@ export async function getDb() {
     return { type: "sqljs", db: sqljsDb };
   }
 
-  // Prisma
-  if (!prisma) {
-    prisma = new PrismaClient();
-  }
+  /* ─ Prisma path ─ */
+  if (!prisma) prisma = new PrismaClient();
   return { type: "prisma", db: prisma };
 }
 

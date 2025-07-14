@@ -1,317 +1,273 @@
+/* src/app/api/report/route.ts */
 import fs from "fs";
 import path from "path";
-import { NextResponse, NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+
 import { generateReport, Report } from "@/lib/parser";
 import { getDb, saveSqljsDb } from "@/lib/db";
-import type { PrismaClient } from "@prisma/client";
-import type { Database } from "sql.js";
 import { safeClone } from "@/lib/safeClone";
+
+import type { Database } from "sql.js";
+import type { PrismaClient } from "@prisma/client";
 
 const SRC_DIR = path.join(process.cwd(), "src");
 const TMP_ROOT = path.join(process.cwd(), "tmp_repos");
 
-interface RepoPayload {
-  repoUrl?: unknown;
-  projectName?: unknown;
-}
-
-interface ProjectRow {
-  id: number;
-  name: string;
-  repoUrl: string;
-  createdAt: string;
-}
-
-async function ensureDbConnection() {
+/* ── db ping ── */
+async function ensureDb() {
   const { type, db } = await getDb();
-  if (type === "sqljs") {
-    (db as Database).exec("SELECT 1");
-  } else {
-    await (db as PrismaClient).$queryRaw`SELECT 1`;
-  }
+  if (type === "sqljs") (db as Database).exec("SELECT 1");
+  else await (db as PrismaClient).$queryRaw`SELECT 1`;
 }
 
+/* ─────────────────── GET ─────────────────── */
 export async function GET(req: NextRequest) {
   const isList = req.nextUrl.searchParams.get("list") === "true";
   const projectName = req.nextUrl.searchParams.get("projectName") || "";
+  let projectId = 0;
   let targetDir = SRC_DIR;
 
   if (isList) {
-    try {
-      await ensureDbConnection();
-      const { type, db } = await getDb();
+    await ensureDb();
+    const { type, db } = await getDb();
 
-      if (type === "sqljs") {
-        const result = (db as Database).exec(
-          "SELECT id, name, repoUrl, createdAt FROM Project ORDER BY createdAt DESC"
-        );
-
-        const projects: ProjectRow[] = result.length
-          ? result[0].values.map((row) => {
-              const [id, name, repoUrl, createdAt] = row as [
-                number,
-                string,
-                string,
-                string
-              ];
-              return { id, name, repoUrl, createdAt };
-            })
-          : [];
-
-        return NextResponse.json({ projects });
-      } else {
-        const projects = await (db as PrismaClient).project.findMany({
-          select: { id: true, name: true, repoUrl: true, createdAt: true },
-          orderBy: { createdAt: "desc" },
-        });
-        return NextResponse.json({ projects });
-      }
-    } catch (e) {
-      return NextResponse.json(
-        { error: e instanceof Error ? e.message : String(e) },
-        { status: 500 }
+    if (type === "sqljs") {
+      const rows = (db as Database).exec(
+        "SELECT id,name,repoUrl,createdAt FROM Project ORDER BY createdAt DESC"
       );
+      const projects = rows.length
+        ? rows[0].values.map(([i, n, u, c]) => ({
+            id: i as number,
+            name: String(n),
+            repoUrl: String(u),
+            createdAt: String(c),
+          }))
+        : [];
+      return NextResponse.json({ projects });
     }
+
+    const projects = await (db as PrismaClient).project.findMany({
+      select: { id: true, name: true, repoUrl: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+    });
+    return NextResponse.json({ projects });
   }
 
+  /* ------ derive projectId & folder ------ */
   if (projectName) {
-    const cloneDir = path.join(TMP_ROOT, projectName);
-    if (!fs.existsSync(cloneDir)) {
+    const { type, db } = await getDb();
+    if (type === "sqljs") {
+      const r = (db as Database).exec("SELECT id FROM Project WHERE name=?", [
+        projectName,
+      ]);
+      projectId = r.length ? (r[0].values[0][0] as number) : 0;
+    } else {
+      const p = await (db as PrismaClient).project.findUnique({
+        where: { name: projectName },
+        select: { id: true },
+      });
+      projectId = p?.id ?? 0;
+    }
+    const dir = path.join(TMP_ROOT, projectName);
+    if (!fs.existsSync(dir))
       return NextResponse.json(
         { error: `No cloned copy found: ${projectName}` },
         { status: 404 }
       );
-    }
-    targetDir = cloneDir;
+    targetDir = dir;
   }
 
   try {
-    const rpt = generateReport(targetDir);
-    const serProps: Record<string, Record<string, string[]>> = {};
-    for (const comp of Object.keys(rpt.propsMap)) {
-      serProps[comp] = {};
-      for (const file of Object.keys(rpt.propsMap[comp])) {
-        serProps[comp][file] = Array.from(rpt.propsMap[comp][file]);
+    const rpt = await generateReport(targetDir, projectId);
+
+    const propsSer: Record<string, Record<string, string[]>> = {};
+    for (const c of Object.keys(rpt.propsMap))
+      for (const f of Object.keys(rpt.propsMap[c])) {
+        propsSer[c] ??= {};
+        propsSer[c][f] = [...rpt.propsMap[c][f]];
       }
-    }
 
     return NextResponse.json({
       usageMap: rpt.usageMap,
       importMap: rpt.importMap,
       avgProps: rpt.avgProps,
-      propsMap: serProps,
+      propsMap: propsSer,
       unused: rpt.unused,
+      breakdown: rpt.breakdown,
     });
   } catch {
     return NextResponse.json(
-      { error: "Failed to generate report from disk." },
+      { error: "Failed to generate report." },
       { status: 500 }
     );
   }
 }
 
+/* ─────────────────── POST ─────────────────── */
+interface RepoPayload {
+  repoUrl?: string;
+  projectName?: string;
+}
+
 export async function POST(req: NextRequest) {
-  let payload: RepoPayload;
-
-  try {
-    payload = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
-  }
-
-  const repoUrl = (payload.repoUrl as string)?.trim();
-  const projectName = (payload.projectName as string)?.trim();
-
-  if (!repoUrl?.endsWith(".git") || !projectName) {
+  const { repoUrl = "", projectName = "" } = (await req.json()) as RepoPayload;
+  if (!repoUrl.endsWith(".git") || !projectName)
     return NextResponse.json(
-      { error: "repoUrl must end in .git and projectName cannot be blank." },
+      { error: "Bad repoUrl / projectName" },
       { status: 400 }
     );
-  }
 
-  try {
-    await ensureDbConnection();
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to connect to DB." },
-      { status: 500 }
-    );
-  }
-
+  await ensureDb();
   const cloneDir = path.join(TMP_ROOT, projectName);
   fs.mkdirSync(TMP_ROOT, { recursive: true });
-  if (fs.existsSync(cloneDir)) {
+  if (fs.existsSync(cloneDir))
     fs.rmSync(cloneDir, { recursive: true, force: true });
-  }
 
   try {
-    safeClone(repoUrl, cloneDir); // ← NEW
-  } catch (e) {
-    console.error("Git clone failed:", (e as Error).message);
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    safeClone(repoUrl, cloneDir);
+  } catch {
+    return NextResponse.json({ error: "Git clone failed." }, { status: 500 });
   }
 
   let rpt: Report;
   try {
-    rpt = generateReport(cloneDir);
+    rpt = await generateReport(cloneDir, 0);
   } catch {
-    return NextResponse.json(
-      { error: "Failed to parse cloned project." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Parse failed." }, { status: 500 });
   }
 
+  /* ---- persist (SQL.js then Prisma) ---- */
   try {
     const { type, db } = await getDb();
 
     if (type === "sqljs") {
-      const sqlDb = db as Database;
-
-      sqlDb.run("INSERT OR IGNORE INTO Project (name, repoUrl) VALUES (?, ?)", [
+      const sdb = db as Database;
+      sdb.run("INSERT OR IGNORE INTO Project(name,repoUrl)VALUES(?,?)", [
         projectName,
         repoUrl,
       ]);
-      const result = sqlDb.exec("SELECT id FROM Project WHERE name = ?", [
+      const pid = sdb.exec("SELECT id FROM Project WHERE name=?", [
         projectName,
-      ]);
-      const projectId = result[0].values[0][0] as number;
+      ])[0].values[0][0] as number;
 
-      sqlDb.run("DELETE FROM ComponentUsage WHERE projectId = ?", [projectId]);
-      sqlDb.run("DELETE FROM PropUsage WHERE projectId = ?", [projectId]);
-      sqlDb.run("DELETE FROM UnusedComponent WHERE projectId = ?", [projectId]);
+      ["ComponentUsage", "PropUsage", "UnusedComponent"].forEach((tbl) =>
+        sdb.run(`DELETE FROM ${tbl} WHERE projectId=?`, [pid])
+      );
 
-      for (const [component, files] of Object.entries(rpt.usageMap)) {
-        const total = Object.values(files).reduce(
-          (sum, count) => sum + count,
-          0
-        );
-        for (const [file, count] of Object.entries(files)) {
-          sqlDb.run(
-            "INSERT INTO ComponentUsage (component, file, count, total, projectId) VALUES (?, ?, ?, ?, ?)",
-            [component, file, count, total, projectId]
+      for (const [c, files] of Object.entries(rpt.usageMap))
+        for (const [f, count] of Object.entries(files))
+          sdb.run(
+            "INSERT INTO ComponentUsage(component,file,count,total,projectId)VALUES(?,?,?,?,?)",
+            [c, f, count, Object.values(files).reduce((s, n) => s + n, 0), pid]
           );
-        }
-      }
 
-      for (const [component, files] of Object.entries(rpt.propsMap)) {
-        for (const [file, propsSet] of Object.entries(files)) {
-          for (const prop of propsSet) {
-            sqlDb.run(
-              "INSERT INTO PropUsage (component, file, prop, projectId) VALUES (?, ?, ?, ?)",
-              [component, file, prop, projectId]
+      for (const [c, files] of Object.entries(rpt.propsMap))
+        for (const [f, props] of Object.entries(files))
+          for (const p of props)
+            sdb.run(
+              "INSERT INTO PropUsage(component,file,prop,projectId)VALUES(?,?,?,?)",
+              [c, f, p, pid]
             );
-          }
-        }
-      }
 
-      for (const name of rpt.unused) {
-        sqlDb.run(
-          "INSERT INTO UnusedComponent (name, projectId) VALUES (?, ?)",
-          [name, projectId]
-        );
-      }
+      for (const u of rpt.unused)
+        sdb.run("INSERT INTO UnusedComponent(name,projectId)VALUES(?,?)", [
+          u,
+          pid,
+        ]);
 
       await saveSqljsDb();
-      return NextResponse.json({ success: true, projectId }, { status: 201 });
-    } else {
-      const prisma = db as PrismaClient;
-      const project = await prisma.project.upsert({
-        where: { name: projectName },
-        create: { name: projectName, repoUrl },
-        update: { repoUrl },
-      });
-
-      await prisma.$transaction([
-        prisma.componentUsage.deleteMany({ where: { projectId: project.id } }),
-        prisma.propUsage.deleteMany({ where: { projectId: project.id } }),
-        prisma.unusedComponent.deleteMany({ where: { projectId: project.id } }),
-        ...Object.entries(rpt.usageMap).flatMap(([component, files]) => {
-          const total = Object.values(files).reduce((s, c) => s + c, 0);
-          return Object.entries(files).map(([file, count]) =>
-            prisma.componentUsage.create({
-              data: { component, file, count, total, projectId: project.id },
-            })
-          );
-        }),
-        ...Object.entries(rpt.propsMap).flatMap(([component, files]) =>
-          Object.entries(files).flatMap(([file, propsSet]) =>
-            Array.from(propsSet).map((prop) =>
-              prisma.propUsage.create({
-                data: { component, file, prop, projectId: project.id },
-              })
-            )
-          )
-        ),
-        ...rpt.unused.map((name) =>
-          prisma.unusedComponent.create({
-            data: { name, projectId: project.id },
-          })
-        ),
-      ]);
-
       return NextResponse.json(
-        { success: true, projectId: project.id },
+        { success: true, projectId: pid },
         { status: 201 }
       );
     }
-  } catch (e) {
-    console.error("DB persist failed:", e);
+
+    /* prisma */
+    const prisma = db as PrismaClient;
+    const project = await prisma.project.upsert({
+      where: { name: projectName },
+      create: { name: projectName, repoUrl },
+      update: { repoUrl },
+    });
+
+    await prisma.$transaction([
+      prisma.componentUsage.deleteMany({ where: { projectId: project.id } }),
+      prisma.propUsage.deleteMany({ where: { projectId: project.id } }),
+      prisma.unusedComponent.deleteMany({ where: { projectId: project.id } }),
+
+      ...Object.entries(rpt.usageMap).flatMap(([c, files]) => {
+        const total = Object.values(files).reduce((s, n) => s + n, 0);
+        return Object.entries(files).map(([f, count]) =>
+          prisma.componentUsage.create({
+            data: {
+              component: c,
+              file: f,
+              count,
+              total,
+              projectId: project.id,
+            },
+          })
+        );
+      }),
+
+      ...Object.entries(rpt.propsMap).flatMap(([c, files]) =>
+        Object.entries(files).flatMap(([f, props]) =>
+          Array.from(props).map((p) =>
+            prisma.propUsage.create({
+              data: { component: c, file: f, prop: p, projectId: project.id },
+            })
+          )
+        )
+      ),
+
+      ...rpt.unused.map((u) =>
+        prisma.unusedComponent.create({
+          data: { name: u, projectId: project.id },
+        })
+      ),
+    ]);
+
     return NextResponse.json(
-      { error: "Failed to persist report to database." },
-      { status: 500 }
+      { success: true, projectId: project.id },
+      { status: 201 }
     );
+  } catch {
+    return NextResponse.json({ error: "DB persist failed." }, { status: 500 });
   }
 }
 
+/* ─────────────────── DELETE (unchanged) ─────────────────── */
 export async function DELETE(req: NextRequest) {
   const name = req.nextUrl.searchParams.get("projectName") || "";
-  if (!name) {
+  if (!name)
     return NextResponse.json(
       { error: "projectName required" },
       { status: 400 }
     );
-  }
 
-  try {
-    await ensureDbConnection();
-    const { type, db } = await getDb();
+  await ensureDb();
+  const { type, db } = await getDb();
 
-    if (type === "sqljs") {
-      const sqlDb = db as Database;
-      // cascade deletes
-      sqlDb.run(
-        "DELETE FROM ComponentUsage WHERE projectId IN (SELECT id FROM Project WHERE name = ?)",
+  if (type === "sqljs") {
+    const sdb = db as Database;
+    ["ComponentUsage", "PropUsage", "UnusedComponent"].forEach((tbl) =>
+      sdb.run(
+        `DELETE FROM ${tbl} WHERE projectId IN (SELECT id FROM Project WHERE name=?)`,
         [name]
-      );
-      sqlDb.run(
-        "DELETE FROM PropUsage      WHERE projectId IN (SELECT id FROM Project WHERE name = ?)",
-        [name]
-      );
-      sqlDb.run(
-        "DELETE FROM UnusedComponent WHERE projectId IN (SELECT id FROM Project WHERE name = ?)",
-        [name]
-      );
-      sqlDb.run("DELETE FROM Project WHERE name = ?", [name]);
-      await saveSqljsDb();
-    } else {
-      const prisma = db as PrismaClient;
-      await prisma.$transaction([
-        prisma.componentUsage.deleteMany({ where: { project: { name } } }),
-        prisma.propUsage.deleteMany({ where: { project: { name } } }),
-        prisma.unusedComponent.deleteMany({ where: { project: { name } } }),
-        prisma.project.deleteMany({ where: { name } }),
-      ]);
-    }
-
-    // wipe cloned repo if it exists
-    const dir = path.join(TMP_ROOT, name);
-    fs.rmSync(dir, { recursive: true, force: true });
-
-    return NextResponse.json({ success: true });
-  } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : String(e) },
-      { status: 500 }
+      )
     );
+    sdb.run("DELETE FROM Project WHERE name=?", [name]);
+    await saveSqljsDb();
+  } else {
+    const prisma = db as PrismaClient;
+    await prisma.$transaction([
+      prisma.componentUsage.deleteMany({ where: { project: { name } } }),
+      prisma.propUsage.deleteMany({ where: { project: { name } } }),
+      prisma.unusedComponent.deleteMany({ where: { project: { name } } }),
+      prisma.project.deleteMany({ where: { name } }),
+    ]);
   }
+
+  fs.rmSync(path.join(TMP_ROOT, name), { recursive: true, force: true });
+  return NextResponse.json({ success: true });
 }

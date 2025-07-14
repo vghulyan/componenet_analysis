@@ -1,68 +1,83 @@
+/* src/app/report/page.tsx */
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useState, useCallback } from "react";
 
-import { RawReport, Project } from "@/app/types";
+import { Project, BreakdownRow } from "@/app/types";
 import CloneForm from "@/components/CloneForm";
 import SavedProjectsTable from "@/components/SavedProjectsTable";
-import ChartsPanel from "@/components/ChartsPanel";
-import DetailTable from "@/components/DetailTable";
+import ClassRuleForm from "@/components/ClassRuleForm";
+import BreakdownTable from "@/components/BreakdownTable";
+
+interface Rule {
+  id: number;
+  pattern: string;
+  package: string;
+}
 
 export default function ReportPage() {
-  /* ── State ─────────────────────────── */
+  /* ── state ───────────────────────── */
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selected, setSelected] = useState<string>("");
-  const [rpt, setRpt] = useState<RawReport | null>(null);
+  const [selected, setSelected] = useState("");
+  const [breakdown, setBreakdown] = useState<BreakdownRow[]>([]);
+  const [rules, setRules] = useState<Rule[]>([]);
 
   const [repoUrl, setRepoUrl] = useState("");
   const [projectName, setProjectName] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  /* NEW ─ toggle between Top-10 and All */
-  const [showAll, setShowAll] = useState(false);
+  /* ── helpers ─────────────────────── */
+  const fetchRules = useCallback(async (proj: string) => {
+    if (!proj) return setRules([]);
+    const res = await fetch(
+      `/api/report/class-rule?projectName=${encodeURIComponent(proj)}`
+    );
+    const { rules } = await res.json();
+    setRules(rules);
+  }, []);
 
-  /* ── Fetchers ──────────────────────── */
-  async function fetchProjects() {
+  const fetchProjects = useCallback(async () => {
     try {
       const res = await fetch("/api/report?list=true");
-      const { projects } = (await res.json()) as { projects: Project[] };
+      const { projects } = await res.json();
       setProjects(projects);
     } catch {
       setMessage("❌ Failed to load saved projects");
     }
-  }
+  }, []);
 
-  async function fetchReport(name = "") {
-    setLoading(true);
-    setMessage(null);
-    try {
-      const q = name ? `?projectName=${encodeURIComponent(name)}` : "";
-      const res = await fetch(`/api/report${q}`);
-      const body = (await res.json()) as Partial<RawReport> & {
-        error?: string;
-      };
-
-      if (!res.ok) {
-        setMessage(`❌ ${body.error || "Unknown error"}`);
-      } else {
-        setRpt(body as RawReport);
+  const fetchReport = useCallback(
+    async (name = "") => {
+      setLoading(true);
+      setMessage(null);
+      try {
+        const q = name ? `?projectName=${encodeURIComponent(name)}` : "";
+        const res = await fetch(`/api/report${q}`);
+        const body = await res.json();
+        if (!res.ok) {
+          setMessage(`❌ ${body.error || "Unknown error"}`);
+          return;
+        }
+        setBreakdown(body.breakdown ?? []);
         setSelected(name);
+        fetchRules(name);
+      } catch {
+        setMessage("❌ Network error");
+      } finally {
+        setLoading(false);
       }
-    } catch {
-      setMessage("❌ Network error");
-    } finally {
-      setLoading(false);
-    }
-  }
+    },
+    [fetchRules]
+  );
 
+  /* ── actions (clone / delete) ─────── */
   async function handleGenerate() {
-    if (!repoUrl.endsWith(".git") || !projectName) {
-      setMessage("❌ Enter a valid .git URL and project name");
-      return;
-    }
+    if (!repoUrl.endsWith(".git") || !projectName)
+      return setMessage("❌ Enter a valid .git URL and project name");
+
     setLoading(true);
     setMessage(null);
     try {
@@ -72,9 +87,8 @@ export default function ReportPage() {
         body: JSON.stringify({ repoUrl, projectName }),
       });
       const body = await res.json();
-      if (!res.ok) {
-        setMessage(`❌ ${body.error}`);
-      } else {
+      if (!res.ok) setMessage(`❌ ${body.error}`);
+      else {
         setMessage(`✅ “${projectName}” saved`);
         await fetchProjects();
         await fetchReport(projectName);
@@ -92,9 +106,7 @@ export default function ReportPage() {
     try {
       const res = await fetch(
         `/api/report?projectName=${encodeURIComponent(name)}`,
-        {
-          method: "DELETE",
-        }
+        { method: "DELETE" }
       );
       if (!res.ok) {
         const { error } = await res.json();
@@ -102,7 +114,11 @@ export default function ReportPage() {
       } else {
         setMessage(`🗑 “${name}” removed`);
         await fetchProjects();
-        if (selected === name) setRpt(null);
+        if (selected === name) {
+          setBreakdown([]);
+          setRules([]);
+          setSelected("");
+        }
       }
     } catch {
       setMessage("❌ Network error");
@@ -111,15 +127,14 @@ export default function ReportPage() {
     }
   }
 
-  /* ── Lifecycle: load list + default report ───────────────── */
+  /* ── mount ────────────────────────── */
   useEffect(() => {
     fetchProjects().then(() => fetchReport());
-  }, []);
+  }, [fetchProjects, fetchReport]);
 
-  /* ── Render ───────────────────────── */
+  /* ── render ───────────────────────── */
   return (
     <div>
-      {/* ───────── NavBar ───────── */}
       <nav className="navbar">
         <Image
           src="/logo.png"
@@ -135,7 +150,6 @@ export default function ReportPage() {
       </nav>
 
       <main style={{ padding: "2rem" }}>
-        {/* ───────── CloneForm ───────── */}
         <CloneForm
           repoUrl={repoUrl}
           setRepoUrl={setRepoUrl}
@@ -145,24 +159,45 @@ export default function ReportPage() {
           onGenerate={handleGenerate}
           message={message}
         />
-        {/* ───────── SavedProjectsTable ───────── */}
+
         <SavedProjectsTable
           projects={projects}
           selected={selected}
           loading={loading}
-          onLoad={(name: string) => fetchReport(name)}
+          onLoad={fetchReport}
           onDelete={handleDelete}
         />
-        {/* ───────── ChartsPanel ───────── */}
-        {rpt && (
-          <ChartsPanel
-            rpt={rpt}
-            showAll={showAll}
-            toggleShowAll={() => setShowAll((prev) => !prev)}
-          />
+
+        <ClassRuleForm
+          projectName={selected}
+          onRefresh={() => {
+            fetchRules(selected);
+            fetchReport(selected);
+          }}
+        />
+
+        {selected && rules.length > 0 && (
+          <ul className="rule-list">
+            {rules.map((r) => (
+              <li key={r.id}>
+                <code>{r.pattern}</code> → <strong>{r.package}</strong>{" "}
+                <button
+                  onClick={async () => {
+                    await fetch(`/api/report/class-rule?id=${r.id}`, {
+                      method: "DELETE",
+                    });
+                    fetchRules(selected);
+                    fetchReport(selected);
+                  }}
+                >
+                  ⓧ
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
-        {/* ───────── DetailTable ───────── */}
-        {rpt && <DetailTable rpt={rpt} showAll={showAll} />}
+
+        {breakdown.length > 0 && <BreakdownTable rows={breakdown} />}
       </main>
     </div>
   );

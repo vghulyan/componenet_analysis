@@ -14,3 +14,9 @@ export type Project = {
   repoUrl: string;
   createdAt: string;
 };
+
+export interface BreakdownRow {
+  file: string;
+  folder: string;
+  packages: Record<string, { pct: number; lines: number[] }>;
+}
