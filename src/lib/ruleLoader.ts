@@ -29,10 +29,12 @@ export async function loadCssRules(projectId: number): Promise<CssRule[]> {
   /* prisma */
   const rows = await (db as PrismaClient).classRule.findMany({
     where: { projectId },
+    select: { pattern: true, package: true, component: true },
   });
-  return rows.map((r) => ({
-    regex: new RegExp(r.pattern),
-    package: r.package,
-    component: r.component ?? undefined,
+
+  return rows.map(({ pattern, package: pkg, component }) => ({
+    regex: new RegExp(pattern),
+    package: pkg,
+    component: component ?? undefined,
   }));
 }
