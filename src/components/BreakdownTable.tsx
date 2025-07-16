@@ -43,7 +43,7 @@ export default function BreakdownTable({ rows }: { rows: Row[] }) {
                   <ul className="pkg-list">
                     {Object.entries(r.packages).map(([pkg, info]) => (
                       <li
-                        key={pkg}
+                        key={`${r.file}-${pkg}`}
                         className={clsx({
                           top: pkg === topPkg,
                           unresolved: pkg === "—",

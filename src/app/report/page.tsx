@@ -178,8 +178,8 @@ export default function ReportPage() {
 
         {selected && rules.length > 0 && (
           <ul className="rule-list">
-            {rules.map((r) => (
-              <li key={r.id}>
+            {rules.map((r, idx) => (
+              <li key={`${r.id ?? "tmp"}-${idx}`}>
                 <code>{r.pattern}</code> → <strong>{r.package}</strong>{" "}
                 <button
                   onClick={async () => {
