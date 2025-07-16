@@ -186,20 +186,28 @@ export default function ReportPage() {
                   </>
                 )}
 
-                {r.id && (
-                  <button
-                    aria-label="delete rule"
-                    onClick={async () => {
-                      await fetch(`/api/report/class-rule?id=${r.id}`, {
-                        method: "DELETE",
-                      });
-                      fetchRules(selected);
-                      fetchReport(selected);
-                    }}
-                  >
-                    ⓧ
-                  </button>
-                )}
+                <button
+                  aria-label="delete rule"
+                  disabled={!r.id}
+                  style={{
+                    marginLeft: 8,
+                    opacity: r.id ? 1 : 0.35,
+                    cursor: r.id ? "pointer" : "not-allowed",
+                    background: "none",
+                    border: "none",
+                    fontSize: "1rem",
+                  }}
+                  onClick={async () => {
+                    if (!r.id) return;
+                    await fetch(`/api/report/class-rule?id=${r.id}`, {
+                      method: "DELETE",
+                    });
+                    fetchRules(selected);
+                    fetchReport(selected);
+                  }}
+                >
+                  ⓧ
+                </button>
               </li>
             ))}
           </ul>
