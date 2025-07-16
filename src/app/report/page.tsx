@@ -178,32 +178,26 @@ export default function ReportPage() {
 
         {selected && rules.length > 0 && (
           <ul className="rule-list">
-            {rules.map((r, idx) => (
-              <li key={`${r.id ?? "tmp"}-${idx}`}>
-                {r.pattern && (
-                  <>
-                    <code>{r.pattern}</code> → <strong>{r.package}</strong>
-                  </>
-                )}
-
+            {rules.map((r) => (
+              <li key={r.id}>
+                <code>{r.pattern}</code> → <strong>{r.package}</strong>
                 <button
-                  aria-label="delete rule"
                   disabled={!r.id}
                   style={{
-                    marginLeft: 8,
                     opacity: r.id ? 1 : 0.35,
                     cursor: r.id ? "pointer" : "not-allowed",
                     background: "none",
                     border: "none",
                     fontSize: "1rem",
+                    marginLeft: 8,
                   }}
                   onClick={async () => {
                     if (!r.id) return;
                     await fetch(`/api/report/class-rule?id=${r.id}`, {
                       method: "DELETE",
                     });
-                    fetchRules(selected);
-                    fetchReport(selected);
+                    await fetchRules(selected);
+                    await fetchReport(selected);
                   }}
                 >
                   ⓧ

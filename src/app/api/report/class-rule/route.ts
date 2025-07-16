@@ -1,11 +1,11 @@
-/* src/app/api/report/class-rule/route.ts */
+/* api/report/class-rule/route.ts */
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, saveSqljsDb } from "@/lib/db";
 import type { Database } from "sql.js";
 import type { PrismaClient } from "@prisma/client";
 
-const bad = (m: string, code = 400) =>
-  NextResponse.json({ error: m }, { status: code });
+const bad = (msg: string, code = 400) =>
+  NextResponse.json({ error: msg }, { status: code });
 
 /* ---------- GET list ---------- */
 export async function GET(req: NextRequest) {
@@ -13,29 +13,40 @@ export async function GET(req: NextRequest) {
   if (!name) return bad("projectName required");
 
   const { type, db } = await getDb();
-  const rows =
-    type === "sqljs"
-      ? (db as Database).exec(
-          `SELECT r.id,r.pattern,r.package
-             FROM ClassRule r
-             JOIN Project p ON p.id=r.projectId
-            WHERE p.name=?`,
-          [name]
-        )[0]?.values ?? []
-      : await (db as PrismaClient).classRule.findMany({
-          where: { project: { name } },
-          select: { id: true, pattern: true, package: true },
-        });
+  let rows;
+
+  if (type === "sqljs") {
+    const res = (db as Database).exec(
+      `SELECT r.id, r.pattern, r.package, r.component
+         FROM ClassRule r
+         JOIN Project p ON p.id = r.projectId
+        WHERE p.name = ?`,
+      [name]
+    );
+    rows =
+      res[0]?.values.map(([id, pattern, pkg, comp]) => ({
+        id: Number(id),
+        pattern: String(pattern),
+        package: String(pkg),
+        component: comp ? String(comp) : undefined,
+      })) ?? [];
+  } else {
+    rows = await (db as PrismaClient).classRule.findMany({
+      where: { project: { name } },
+      select: { id: true, pattern: true, package: true, component: true },
+    });
+  }
 
   return NextResponse.json({ rules: rows });
 }
 
 /* ---------- PUT create ---------- */
 export async function PUT(req: NextRequest) {
-  const { pattern, pkg, projectName } = await req.json();
+  const { pattern, pkg, projectName, component } = await req.json();
   if (!pattern || !pkg || !projectName) return bad("pattern, pkg, projectName");
 
   const { type, db } = await getDb();
+
   const projectId =
     type === "sqljs"
       ? (db as Database).exec("SELECT id FROM Project WHERE name=?", [
@@ -47,18 +58,22 @@ export async function PUT(req: NextRequest) {
             select: { id: true },
           })
         )?.id;
-
   if (!projectId) return bad("project not found", 404);
 
   if (type === "sqljs") {
     (db as Database).run(
-      "INSERT INTO ClassRule(pattern,package,projectId)VALUES(?,?,?)",
-      [pattern, pkg, projectId]
+      "INSERT INTO ClassRule(pattern,package,component,projectId) VALUES(?,?,?,?)",
+      [pattern, pkg, component ?? null, projectId]
     );
     await saveSqljsDb();
   } else {
     await (db as PrismaClient).classRule.create({
-      data: { pattern, package: pkg, projectId: projectId as number },
+      data: {
+        pattern,
+        package: pkg,
+        component: component ?? null,
+        projectId: projectId as number,
+      },
     });
   }
   return NextResponse.json({ ok: true });
