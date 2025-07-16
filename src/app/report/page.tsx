@@ -180,7 +180,12 @@ export default function ReportPage() {
           <ul className="rule-list">
             {rules.map((r, idx) => (
               <li key={`${r.id ?? "tmp"}-${idx}`}>
-                <code>{r.pattern}</code> → <strong>{r.package}</strong>
+                {r.pattern && (
+                  <>
+                    <code>{r.pattern}</code> → <strong>{r.package}</strong>
+                  </>
+                )}
+
                 {r.id && (
                   <button
                     aria-label="delete rule"
