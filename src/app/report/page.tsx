@@ -180,18 +180,21 @@ export default function ReportPage() {
           <ul className="rule-list">
             {rules.map((r, idx) => (
               <li key={`${r.id ?? "tmp"}-${idx}`}>
-                <code>{r.pattern}</code> → <strong>{r.package}</strong>{" "}
-                <button
-                  onClick={async () => {
-                    await fetch(`/api/report/class-rule?id=${r.id}`, {
-                      method: "DELETE",
-                    });
-                    fetchRules(selected);
-                    fetchReport(selected);
-                  }}
-                >
-                  ⓧ
-                </button>
+                <code>{r.pattern}</code> → <strong>{r.package}</strong>
+                {r.id && (
+                  <button
+                    aria-label="delete rule"
+                    onClick={async () => {
+                      await fetch(`/api/report/class-rule?id=${r.id}`, {
+                        method: "DELETE",
+                      });
+                      fetchRules(selected);
+                      fetchReport(selected);
+                    }}
+                  >
+                    ⓧ
+                  </button>
+                )}
               </li>
             ))}
           </ul>
