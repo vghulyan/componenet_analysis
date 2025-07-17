@@ -5,11 +5,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 
-import { Project, BreakdownRow } from "@/app/types";
+import { Project, BreakdownRow, PackageSummary } from "@/app/types";
 import CloneForm from "@/components/CloneForm";
 import SavedProjectsTable from "@/components/SavedProjectsTable";
 import ClassRuleForm from "@/components/ClassRuleForm";
 import BreakdownTable from "@/components/BreakdownTable";
+import PackageSummaryTable from "@/components/PackageSummaryTable";
 
 interface Rule {
   id: number;
@@ -28,6 +29,8 @@ export default function ReportPage() {
   const [projectName, setProjectName] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  const [pkgSummary, setPkgSummary] = useState<PackageSummary>({});
 
   /* ── helpers ─────────────────────── */
   const fetchRules = useCallback(async (proj: string) => {
@@ -64,6 +67,9 @@ export default function ReportPage() {
         setBreakdown(body.breakdown ?? []);
         setSelected(name);
         fetchRules(name);
+
+        setBreakdown(body.breakdown ?? []);
+        setPkgSummary(body.packageSummary ?? {});
       } catch {
         setMessage("❌ Network error");
       } finally {
@@ -175,6 +181,13 @@ export default function ReportPage() {
             fetchReport(selected);
           }}
         />
+
+        {Object.keys(pkgSummary).length > 0 && (
+          <>
+            <h2 style={{ marginTop: "2rem" }}>Package summary</h2>
+            <PackageSummaryTable summary={pkgSummary} />
+          </>
+        )}
 
         {selected && rules.length > 0 && (
           <ul className="rule-list">

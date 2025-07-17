@@ -80,6 +80,13 @@ export async function GET(req: NextRequest) {
   try {
     const rpt = await generateReport(targetDir, projectId);
 
+    const pkgSummary: Record<string, number> = {};
+    for (const pkgMap of Object.values(rpt.importMap)) {
+      for (const pkg of Object.keys(pkgMap)) {
+        pkgSummary[pkg] = (pkgSummary[pkg] ?? 0) + 1;
+      }
+    }
+
     const propsSer: Record<string, Record<string, string[]>> = {};
     for (const c of Object.keys(rpt.propsMap))
       for (const f of Object.keys(rpt.propsMap[c])) {
@@ -94,6 +101,7 @@ export async function GET(req: NextRequest) {
       propsMap: propsSer,
       unused: rpt.unused,
       breakdown: rpt.breakdown,
+      packageSummary: pkgSummary,
     });
   } catch {
     return NextResponse.json(
