@@ -3,49 +3,61 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 import { Project, BreakdownRow, PackageSummary } from "@/app/types";
+
 import CloneForm from "@/components/CloneForm";
 import SavedProjectsTable from "@/components/SavedProjectsTable";
 import ClassRuleForm from "@/components/ClassRuleForm";
 import BreakdownTable from "@/components/BreakdownTable";
 import PackageSummaryTable from "@/components/PackageSummaryTable";
 
-interface Rule {
-  id: number;
-  pattern: string;
-  package: string;
+/* ---------- helpers ---------- */
+type Rule = { id: number; pattern: string; package: string };
+
+interface ApiReportPayload {
+  breakdown?: BreakdownRow[];
+  packageSummary?: PackageSummary;
+  packageTotal?: number;
+  error?: string;
 }
 
+/* ---------- component ---------- */
 export default function ReportPage() {
-  /* ── state ───────────────────────── */
+  /* ── state ─────────────────────────── */
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState<string>("");
+
   const [breakdown, setBreakdown] = useState<BreakdownRow[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
 
-  const [repoUrl, setRepoUrl] = useState("");
-  const [projectName, setProjectName] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [pkgSummary, setPkgSummary] = useState<PackageSummary>({});
+  const [pkgTotal, setPkgTotal] = useState<number>(0);
+
+  const [repoUrl, setRepoUrl] = useState<string>("");
+  const [projectName, setProjectName] = useState<string>("");
+
+  const [loading, setLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const [pkgSummary, setPkgSummary] = useState<PackageSummary>({});
-
-  /* ── helpers ─────────────────────── */
+  /* ── API fetchers ──────────────────── */
   const fetchRules = useCallback(async (proj: string) => {
-    if (!proj) return setRules([]);
+    if (!proj) {
+      setRules([]);
+      return;
+    }
     const res = await fetch(
       `/api/report/class-rule?projectName=${encodeURIComponent(proj)}`
     );
-    const { rules } = await res.json();
-    setRules(rules);
+    const json = await res.json();
+    setRules(json.rules as Rule[]);
   }, []);
 
   const fetchProjects = useCallback(async () => {
     try {
       const res = await fetch("/api/report?list=true");
-      const { projects } = await res.json();
+      const { projects } = (await res.json()) as { projects: Project[] };
       setProjects(projects);
     } catch {
       setMessage("❌ Failed to load saved projects");
@@ -53,23 +65,25 @@ export default function ReportPage() {
   }, []);
 
   const fetchReport = useCallback(
-    async (name = "") => {
+    async (projName = "") => {
       setLoading(true);
-      setMessage(null);
       try {
-        const q = name ? `?projectName=${encodeURIComponent(name)}` : "";
+        const q = projName
+          ? `?projectName=${encodeURIComponent(projName)}`
+          : "";
         const res = await fetch(`/api/report${q}`);
-        const body = await res.json();
+        const body = (await res.json()) as ApiReportPayload;
+
         if (!res.ok) {
-          setMessage(`❌ ${body.error || "Unknown error"}`);
+          setMessage(`❌ ${body.error ?? "Unknown error"}`);
           return;
         }
-        setBreakdown(body.breakdown ?? []);
-        setSelected(name);
-        fetchRules(name);
 
         setBreakdown(body.breakdown ?? []);
         setPkgSummary(body.packageSummary ?? {});
+        setPkgTotal(body.packageTotal ?? 0);
+        setSelected(projName);
+        fetchRules(projName);
       } catch {
         setMessage("❌ Network error");
       } finally {
@@ -79,13 +93,15 @@ export default function ReportPage() {
     [fetchRules]
   );
 
-  /* ── actions (clone / delete) ─────── */
+  /* ── actions ───────────────────────── */
   async function handleGenerate() {
-    if (!repoUrl.endsWith(".git") || !projectName)
-      return setMessage("❌ Enter a valid .git URL and project name");
-
+    if (!repoUrl.endsWith(".git") || !projectName) {
+      setMessage("❌ Enter a valid .git URL and project name");
+      return;
+    }
     setLoading(true);
     setMessage(null);
+
     try {
       const res = await fetch("/api/report", {
         method: "POST",
@@ -93,6 +109,7 @@ export default function ReportPage() {
         body: JSON.stringify({ repoUrl, projectName }),
       });
       const body = await res.json();
+
       if (!res.ok) setMessage(`❌ ${body.error}`);
       else {
         setMessage(`✅ “${projectName}” saved`);
@@ -109,6 +126,7 @@ export default function ReportPage() {
   async function handleDelete(name: string) {
     if (!confirm(`Delete “${name}” and its data?`)) return;
     setLoading(true);
+
     try {
       const res = await fetch(
         `/api/report?projectName=${encodeURIComponent(name)}`,
@@ -124,6 +142,8 @@ export default function ReportPage() {
           setBreakdown([]);
           setRules([]);
           setSelected("");
+          setPkgSummary({});
+          setPkgTotal(0);
         }
       }
     } catch {
@@ -133,14 +153,15 @@ export default function ReportPage() {
     }
   }
 
-  /* ── mount ────────────────────────── */
+  /* ── mount ─────────────────────────── */
   useEffect(() => {
     fetchProjects().then(() => fetchReport());
   }, [fetchProjects, fetchReport]);
 
-  /* ── render ───────────────────────── */
+  /* ── render ────────────────────────── */
   return (
     <div>
+      {/* ────────── NAV BAR ────────── */}
       <nav className="navbar">
         <Image
           src="/logo.png"
@@ -156,6 +177,7 @@ export default function ReportPage() {
       </nav>
 
       <main style={{ padding: "2rem" }}>
+        {/* clone / save */}
         <CloneForm
           repoUrl={repoUrl}
           setRepoUrl={setRepoUrl}
@@ -166,6 +188,7 @@ export default function ReportPage() {
           message={message}
         />
 
+        {/* saved projects */}
         <SavedProjectsTable
           projects={projects}
           selected={selected}
@@ -174,6 +197,7 @@ export default function ReportPage() {
           onDelete={handleDelete}
         />
 
+        {/* class-rule input */}
         <ClassRuleForm
           projectName={selected}
           onRefresh={() => {
@@ -182,27 +206,30 @@ export default function ReportPage() {
           }}
         />
 
-        {Object.keys(pkgSummary).length > 0 && (
+        {/* package summary */}
+        {pkgTotal > 0 && (
           <>
             <h2 style={{ marginTop: "2rem" }}>Package summary</h2>
-            <PackageSummaryTable summary={pkgSummary} />
+            <PackageSummaryTable summary={pkgSummary} total={pkgTotal} />
           </>
         )}
 
+        {/* rule list */}
         {selected && rules.length > 0 && (
-          <ul className="rule-list">
+          <ul className="rule-list" style={{ marginTop: 16 }}>
             {rules.map((r) => (
               <li key={r.id}>
                 <code>{r.pattern}</code> → <strong>{r.package}</strong>
                 <button
+                  title="Delete rule"
                   disabled={!r.id}
                   style={{
-                    opacity: r.id ? 1 : 0.35,
-                    cursor: r.id ? "pointer" : "not-allowed",
-                    background: "none",
-                    border: "none",
-                    fontSize: "1rem",
                     marginLeft: 8,
+                    border: "none",
+                    background: "none",
+                    cursor: r.id ? "pointer" : "not-allowed",
+                    opacity: r.id ? 1 : 0.4,
+                    fontSize: "1.1rem",
                   }}
                   onClick={async () => {
                     if (!r.id) return;
@@ -220,6 +247,7 @@ export default function ReportPage() {
           </ul>
         )}
 
+        {/* per-file breakdown */}
         {breakdown.length > 0 && <BreakdownTable rows={breakdown} />}
       </main>
     </div>

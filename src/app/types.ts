@@ -23,5 +23,10 @@ export interface BreakdownRow {
 }
 
 export interface PackageSummary {
-  [pkg: string]: number; // “react” ⇒ 12 components
+  [pkg: string]: number;
+}
+
+export interface PackageStats {
+  summary: PackageSummary;
+  total: number;
 }

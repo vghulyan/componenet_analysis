@@ -94,6 +94,11 @@ export async function GET(req: NextRequest) {
         propsSer[c][f] = [...rpt.propsMap[c][f]];
       }
 
+    const totalComponents = Object.values(pkgSummary).reduce(
+      (s, n) => s + n,
+      0
+    );
+
     return NextResponse.json({
       usageMap: rpt.usageMap,
       importMap: rpt.importMap,
@@ -102,6 +107,7 @@ export async function GET(req: NextRequest) {
       unused: rpt.unused,
       breakdown: rpt.breakdown,
       packageSummary: pkgSummary,
+      packageTotal: totalComponents,
     });
   } catch {
     return NextResponse.json(
