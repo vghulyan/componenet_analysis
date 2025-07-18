@@ -208,10 +208,7 @@ export default function ReportPage() {
 
         {/* package summary */}
         {pkgTotal > 0 && (
-          <>
-            <h2 style={{ marginTop: "2rem" }}>Package summary</h2>
-            <PackageSummaryTable summary={pkgSummary} total={pkgTotal} />
-          </>
+          <PackageSummaryTable summary={pkgSummary} total={pkgTotal} />
         )}
 
         {/* rule list */}
