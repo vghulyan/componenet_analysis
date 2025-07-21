@@ -1,4 +1,3 @@
-/* components/ClassRuleForm.tsx */
 "use client";
 import { useState } from "react";
 
@@ -11,7 +10,6 @@ export default function ClassRuleForm({ projectName, onRefresh }: Props) {
   /** controlled inputs */
   const [pattern, setPattern] = useState("");
   const [pkg, setPkg] = useState("");
-  const [component, setComponent] = useState(""); // ⬅️ NEW optional
   const [dirty, setDirty] = useState(false);
 
   /* save rule then refresh the tables */
@@ -22,7 +20,6 @@ export default function ClassRuleForm({ projectName, onRefresh }: Props) {
     }
 
     const payload: Record<string, unknown> = { pattern, pkg, projectName };
-    if (component.trim()) payload.component = component.trim();
 
     await fetch("/api/report/class-rule", {
       method: "PUT",
@@ -32,7 +29,6 @@ export default function ClassRuleForm({ projectName, onRefresh }: Props) {
 
     setPattern("");
     setPkg("");
-    setComponent("");
     setDirty(true); // show refresh button
     onRefresh(); // auto-refresh after add
   }
@@ -50,13 +46,6 @@ export default function ClassRuleForm({ projectName, onRefresh }: Props) {
         placeholder="package e.g. zanzibar"
         value={pkg}
         onChange={(e) => setPkg(e.target.value)}
-      />
-      <input /* optional component alias */
-        className="rule-input"
-        style={{ width: 180 }}
-        placeholder="component (opt.)"
-        value={component}
-        onChange={(e) => setComponent(e.target.value)}
       />
 
       <button className="rule-btn" onClick={save}>
