@@ -4,6 +4,7 @@ import path from "path";
 import strip from "strip-comments";
 
 import { loadCssRules, CssRule } from "./ruleLoader";
+import { zbClassToSdkComponent } from "./zbClassToSdk";
 
 /* ---------- types ---------- */
 export type UsageMap = Record<string, Record<string, number>>;
@@ -121,7 +122,23 @@ export async function generateReport(
       if (cls) {
         for (const token of cls[2].split(/\s+/)) {
           const rule = cssRules.find((r) => r.regex.test(token));
-          if (rule) addPkgLine(rel, rule.package, ln);
+          if (rule) {
+            addPkgLine(rel, rule.package, ln);
+            continue; // rule-based hit – we're done
+          }
+
+          /* --- NEW: auto “zb-” -> SDKClass* component --- */
+          const sdkComp = zbClassToSdkComponent(token);
+          if (sdkComp) {
+            // treat as a local “component” that belongs to package "sdk"
+            usageMap[sdkComp] ??= {};
+            usageMap[sdkComp][rel] = (usageMap[sdkComp][rel] || 0) + 1;
+
+            importMap[sdkComp] ??= {};
+            importMap[sdkComp]["sdk"] = (importMap[sdkComp]["sdk"] || 0) + 1;
+
+            addPkgLine(rel, "sdk", ln);
+          }
         }
       }
     });
