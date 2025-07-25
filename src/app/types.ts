@@ -19,7 +19,14 @@ export type Project = {
 export interface BreakdownRow {
   file: string;
   folder: string;
-  packages: Record<string, { pct: number; lines: number[] }>;
+  packages: Record<
+    string,
+    {
+      pct: number;
+      lines: number[];
+      sdkList?: string[];
+    }
+  >;
 }
 
 export interface PackageSummary {

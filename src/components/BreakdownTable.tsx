@@ -5,7 +5,10 @@ import clsx from "clsx";
 interface Row {
   file: string;
   folder: string;
-  packages: Record<string, { pct: number; lines: number[] }>;
+  packages: Record<
+    string,
+    { pct: number; lines: number[]; sdkList?: string[] }
+  >;
 }
 
 export default function BreakdownTable({ rows }: { rows: Row[] }) {
@@ -41,9 +44,9 @@ export default function BreakdownTable({ rows }: { rows: Row[] }) {
                 <td title={r.folder}>{truncateMid(r.folder, 40)}</td>
                 <td>
                   <ul className="pkg-list">
-                    {Object.entries(r.packages).map(([pkg, info]) => (
+                    {Object.entries(r.packages).map(([pkg, info], idx) => (
                       <li
-                        key={`${r.file}-${pkg}`}
+                        key={`${r.file}-${pkg}-${idx}`}
                         className={clsx({
                           top: pkg === topPkg,
                           unresolved: pkg === "—",
@@ -53,6 +56,17 @@ export default function BreakdownTable({ rows }: { rows: Row[] }) {
                         <span className="pkg-pct">{info.pct}%</span>
                         <span className="pkg-lines">
                           @ {info.lines.join(", ")}
+                          {/*  ── NEW: list every SDK pseudo-component ── */}
+                          {info.sdkList?.length ? (
+                            <>
+                              {" "}
+                              (
+                              {info.sdkList.map((s, i) => (
+                                <code key={s}>{i ? `, ${s}` : s}</code>
+                              ))}
+                              )
+                            </>
+                          ) : null}
                         </span>
                       </li>
                     ))}

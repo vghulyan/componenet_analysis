@@ -14,7 +14,14 @@ export type ImportMap = Record<string, Record<string, number>>;
 export interface Breakdown {
   file: string;
   folder: string;
-  packages: Record<string, { lines: number[]; pct: number }>;
+  packages: Record<
+    string,
+    {
+      pct: number;
+      lines: number[];
+      sdkList?: string[];
+    }
+  >;
 }
 
 export interface Report {
@@ -46,12 +53,22 @@ export async function generateReport(
   const declared = new Set<string>();
 
   /* per-file package line-hits */
-  const filePkgLines: Record<string, Record<string, Set<number>>> = {};
+  interface PkgInfo {
+    lines: Set<number>;
+    sdk: Set<string>; // only for “WebSDK”
+  }
+  const filePkgLines: Record<string, Record<string, PkgInfo>> = {};
 
-  const addPkgLine = (file: string, pkg: string, line: number) => {
+  const addPkgLine = (
+    file: string,
+    pkg: string,
+    line: number,
+    sdkName?: string
+  ) => {
     filePkgLines[file] ??= {};
-    filePkgLines[file][pkg] ??= new Set();
-    filePkgLines[file][pkg].add(line);
+    filePkgLines[file][pkg] ??= { lines: new Set(), sdk: new Set() };
+    filePkgLines[file][pkg].lines.add(line);
+    if (sdkName) filePkgLines[file][pkg].sdk.add(sdkName);
   };
 
   const isTestFile = (name: string) =>
@@ -135,9 +152,10 @@ export async function generateReport(
             usageMap[sdkComp][rel] = (usageMap[sdkComp][rel] || 0) + 1;
 
             importMap[sdkComp] ??= {};
-            importMap[sdkComp]["sdk"] = (importMap[sdkComp]["sdk"] || 0) + 1;
+            importMap[sdkComp]["WebSDK"] =
+              (importMap[sdkComp]["WebSDK"] || 0) + 1;
 
-            addPkgLine(rel, "sdk", ln);
+            addPkgLine(rel, "WebSDK", ln, sdkComp);
           }
         }
       }
@@ -156,12 +174,16 @@ export async function generateReport(
   /* breakdown */
   const breakdown: Breakdown[] = Object.entries(filePkgLines).map(
     ([file, pkgs]) => {
-      const total = Object.values(pkgs).reduce((s, set) => s + set.size, 0);
+      const total = Object.values(pkgs).reduce(
+        (s, info) => s + info.lines.size,
+        0
+      );
       const packages: Breakdown["packages"] = {};
-      for (const [pkg, set] of Object.entries(pkgs))
+      for (const [pkg, info] of Object.entries(pkgs))
         packages[pkg] = {
-          lines: Array.from(set).sort((a, b) => a - b),
-          pct: Math.round((set.size * 100) / total),
+          lines: Array.from(info.lines).sort((a, b) => a - b),
+          pct: Math.round((info.lines.size * 100) / total),
+          sdkList: [...info.sdk].sort(),
         };
       return { file, folder: path.dirname(file), packages };
     }
